@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import ThaliCard, { ThaliItem } from "@/components/ThaliCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsItem, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
 
 // Sample menu data

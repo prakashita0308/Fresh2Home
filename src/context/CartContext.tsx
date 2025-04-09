@@ -1,7 +1,7 @@
 
 import { createContext, useState, ReactNode, useEffect } from "react";
 import { ThaliItem } from "@/components/ThaliCard";
-import { toast } from "@/components/ui/sonner"; 
+import { toast } from "sonner"; 
 
 export interface CartItem extends ThaliItem {
   quantity: number;
