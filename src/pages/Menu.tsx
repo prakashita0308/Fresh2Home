@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
+import { 
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious
+} from "@/components/ui/carousel";
 
 // Sample menu data
 const menuItems: ThaliItem[] = [
@@ -139,6 +146,9 @@ const Menu = () => {
   
   // Get all categories
   const categories = ["all", ...new Set(menuItems.map(item => item.category))];
+
+  // Get popular items for carousel
+  const popularItems = menuItems.filter(item => item.isPopular);
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -153,6 +163,32 @@ const Menu = () => {
               From thalis to individual dishes, we have something for everyone.
             </p>
           </div>
+        </div>
+        
+        {/* Featured items carousel */}
+        <div className="container px-4 py-12 bg-white">
+          <h2 className="text-2xl font-bold mb-8 text-center">Popular Picks</h2>
+          <Carousel 
+            opts={{
+              align: "start",
+              loop: true,
+            }}
+            className="w-full max-w-5xl mx-auto"
+          >
+            <CarouselContent>
+              {popularItems.map((item) => (
+                <CarouselItem key={item.id} className="md:basis-1/2 lg:basis-1/3">
+                  <div className="p-1">
+                    <ThaliCard thali={item} />
+                  </div>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <div className="flex justify-center mt-4">
+              <CarouselPrevious className="relative static translate-y-0 mr-2" />
+              <CarouselNext className="relative static translate-y-0 ml-2" />
+            </div>
+          </Carousel>
         </div>
         
         {/* Filters and search */}

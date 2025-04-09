@@ -41,8 +41,11 @@ const ThaliCard = ({ thali }: ThaliCardProps) => {
       '5': '/images/rajasthani-thali.jpg',
       '6': '/images/butter-chicken.jpg',
       '7': '/images/paneer-tikka.jpg',
+      '8': '/images/dal-makhani.jpg',
       '9': '/images/masala-dosa.jpg',
-      '11': '/images/gulab-jamun.jpg'
+      '10': '/images/pav-bhaji.jpg',
+      '11': '/images/gulab-jamun.jpg',
+      '12': '/images/rasgulla.jpg'
     };
     
     // First check for id-specific image, then category default, then fallback
