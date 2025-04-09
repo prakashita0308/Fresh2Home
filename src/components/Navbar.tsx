@@ -1,9 +1,18 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Menu, ShoppingCart, User, X } from "lucide-react";
+import { Menu, ShoppingCart, User, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CartIcon from "./CartIcon";
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+  navigationMenuTriggerStyle,
+} from "@/components/ui/navigation-menu";
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -16,20 +25,61 @@ const Navbar = () => {
         </Link>
 
         <div className="hidden md:flex items-center gap-6">
-          <nav className="flex gap-6">
-            <Link to="/" className="text-sm font-medium hover:text-fresh-orange transition-colors">
-              Home
-            </Link>
-            <Link to="/menu" className="text-sm font-medium hover:text-fresh-orange transition-colors">
-              Menu
-            </Link>
-            <Link to="#" className="text-sm font-medium hover:text-fresh-orange transition-colors">
-              About
-            </Link>
-            <Link to="#" className="text-sm font-medium hover:text-fresh-orange transition-colors">
-              Contact
-            </Link>
-          </nav>
+          <NavigationMenu>
+            <NavigationMenuList>
+              <NavigationMenuItem>
+                <Link to="/" className="text-sm font-medium hover:text-fresh-orange transition-colors p-2">
+                  Home
+                </Link>
+              </NavigationMenuItem>
+              
+              <NavigationMenuItem>
+                <NavigationMenuTrigger className="text-sm font-medium">Menu</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="grid grid-cols-2 gap-3 p-4 w-[400px]">
+                    <Link to="/menu" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">All Items</div>
+                      <div className="text-xs text-muted-foreground">Our complete menu selection</div>
+                    </Link>
+                    <Link to="/menu?category=thali" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">Thalis</div>
+                      <div className="text-xs text-muted-foreground">Complete meal combinations</div>
+                    </Link>
+                    <Link to="/menu?category=main" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">Main Courses</div>
+                      <div className="text-xs text-muted-foreground">Delicious entrees and curries</div>
+                    </Link>
+                    <Link to="/menu?category=breakfast" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">Breakfast</div>
+                      <div className="text-xs text-muted-foreground">Morning specialties</div>
+                    </Link>
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+              
+              <NavigationMenuItem>
+                <NavigationMenuTrigger className="text-sm font-medium">About</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="grid grid-cols-1 gap-3 p-4 w-[300px]">
+                    <Link to="/about" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">Our Story</div>
+                      <div className="text-xs text-muted-foreground">Learn about Fresh2Home</div>
+                    </Link>
+                    <Link to="/chefs" className="flex flex-col space-y-1 p-3 hover:bg-accent rounded-md">
+                      <div className="font-medium">Our Chefs</div>
+                      <div className="text-xs text-muted-foreground">Meet the team behind the food</div>
+                    </Link>
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+
+              <NavigationMenuItem>
+                <Link to="/contact" className="text-sm font-medium hover:text-fresh-orange transition-colors p-2">
+                  Contact
+                </Link>
+              </NavigationMenuItem>
+            </NavigationMenuList>
+          </NavigationMenu>
 
           <div className="flex items-center gap-4">
             <Link to="/cart">
@@ -74,22 +124,62 @@ const Navbar = () => {
               >
                 Home
               </Link>
+              
+              <div className="space-y-3">
+                <div className="flex items-center">
+                  <span className="text-lg font-medium">Menu</span>
+                  <ChevronDown size={16} className="ml-1"/>
+                </div>
+                <div className="pl-4 space-y-2">
+                  <Link 
+                    to="/menu" 
+                    className="block text-muted-foreground hover:text-fresh-orange"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    All Items
+                  </Link>
+                  <Link 
+                    to="/menu?category=thali" 
+                    className="block text-muted-foreground hover:text-fresh-orange"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Thalis
+                  </Link>
+                  <Link 
+                    to="/menu?category=main" 
+                    className="block text-muted-foreground hover:text-fresh-orange"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Main Courses
+                  </Link>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center">
+                  <span className="text-lg font-medium">About</span>
+                  <ChevronDown size={16} className="ml-1"/>
+                </div>
+                <div className="pl-4 space-y-2">
+                  <Link 
+                    to="/about" 
+                    className="block text-muted-foreground hover:text-fresh-orange"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Our Story
+                  </Link>
+                  <Link 
+                    to="/chefs" 
+                    className="block text-muted-foreground hover:text-fresh-orange"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Our Chefs
+                  </Link>
+                </div>
+              </div>
+              
               <Link 
-                to="/menu" 
-                className="text-lg font-medium hover:text-fresh-orange transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Menu
-              </Link>
-              <Link 
-                to="#" 
-                className="text-lg font-medium hover:text-fresh-orange transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                About
-              </Link>
-              <Link 
-                to="#" 
+                to="/contact" 
                 className="text-lg font-medium hover:text-fresh-orange transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >

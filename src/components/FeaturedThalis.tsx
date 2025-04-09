@@ -1,5 +1,4 @@
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import ThaliCard, { ThaliItem } from "./ThaliCard";
 import { ChevronRight } from "lucide-react";
@@ -12,7 +11,7 @@ const featuredThalis: ThaliItem[] = [
     name: "Gujarati Thali",
     description: "A complete meal with dal, kadhi, rotis, rice, vegetables and sweet dish",
     price: 299,
-    image: "/placeholder.svg",
+    image: "/images/gujarati-thali.jpg",
     category: "thali",
     isVeg: true,
     isPopular: true
@@ -22,7 +21,7 @@ const featuredThalis: ThaliItem[] = [
     name: "Punjabi Thali",
     description: "Rich and flavorful thali with butter chicken, dal makhani, naan, pulao and more",
     price: 349,
-    image: "/placeholder.svg",
+    image: "/images/punjabi-thali.jpg",
     category: "thali",
     isVeg: false,
     isPopular: true
@@ -32,7 +31,7 @@ const featuredThalis: ThaliItem[] = [
     name: "South Indian Thali",
     description: "A delicious assortment of sambhar, rasam, rice, vegetables and payasam",
     price: 279,
-    image: "/placeholder.svg",
+    image: "/images/south-indian-thali.jpg",
     category: "thali",
     isVeg: true
   },
@@ -41,7 +40,7 @@ const featuredThalis: ThaliItem[] = [
     name: "Bengali Thali",
     description: "Authentic Bengali dishes including fish curry, luchi, cholar dal and mishti doi",
     price: 329,
-    image: "/placeholder.svg",
+    image: "/images/bengali-thali.jpg",
     category: "thali",
     isVeg: false
   }

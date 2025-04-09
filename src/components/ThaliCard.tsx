@@ -23,11 +23,37 @@ interface ThaliCardProps {
 const ThaliCard = ({ thali }: ThaliCardProps) => {
   const { addToCart } = useContext(CartContext);
 
+  // Map of food images for different categories
+  const getImageForThali = (id: string, category: string) => {
+    const categoryImages: Record<string, string> = {
+      'thali': '/images/thali.jpg',
+      'main': '/images/main-course.jpg',
+      'breakfast': '/images/breakfast.jpg',
+      'dessert': '/images/dessert.jpg'
+    };
+    
+    // If we have specific images for specific IDs
+    const idSpecificImages: Record<string, string> = {
+      '1': '/images/gujarati-thali.jpg',
+      '2': '/images/punjabi-thali.jpg',
+      '3': '/images/south-indian-thali.jpg',
+      '4': '/images/bengali-thali.jpg',
+      '5': '/images/rajasthani-thali.jpg',
+      '6': '/images/butter-chicken.jpg',
+      '7': '/images/paneer-tikka.jpg',
+      '9': '/images/masala-dosa.jpg',
+      '11': '/images/gulab-jamun.jpg'
+    };
+    
+    // First check for id-specific image, then category default, then fallback
+    return idSpecificImages[id] || categoryImages[category] || '/images/default-food.jpg';
+  };
+
   return (
     <Card className="overflow-hidden thali-card transition-all duration-300">
       <div className="relative aspect-video overflow-hidden">
         <img
-          src={thali.image}
+          src={getImageForThali(thali.id, thali.category)}
           alt={thali.name}
           className="object-cover w-full h-full transform hover:scale-105 transition-transform duration-300"
         />
