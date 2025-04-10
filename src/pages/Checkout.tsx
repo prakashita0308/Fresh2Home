@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Check, CreditCard, MapPin } from "lucide-react";
+import { Check, CreditCard, MapPin, Smartphone } from "lucide-react";
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
@@ -33,6 +33,8 @@ const Checkout = () => {
   });
   
   const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [upiId, setUpiId] = useState("");
+  const [upiProvider, setUpiProvider] = useState("phonepe");
   const [specialInstructions, setSpecialInstructions] = useState("");
   
   const deliveryFee = 40;
@@ -53,11 +55,18 @@ const Checkout = () => {
       return;
     }
     
+    // Validate UPI ID if UPI payment method is selected
+    if (paymentMethod === "upi" && !upiId) {
+      toast.error("Please enter a valid UPI ID");
+      return;
+    }
+    
     // Process order - In a real application, this would send data to a server
     console.log("Order placed:", {
       items,
       address,
       paymentMethod,
+      upiDetails: paymentMethod === "upi" ? { upiId, provider: upiProvider } : null,
       specialInstructions,
       total
     });
@@ -168,11 +177,98 @@ const Checkout = () => {
                     <RadioGroupItem value="cod" id="cod" />
                     <Label htmlFor="cod">Cash on Delivery</Label>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  
+                  <div className="flex items-center space-x-2 mb-3">
                     <RadioGroupItem value="online" id="online" />
-                    <Label htmlFor="online">Online Payment (Credit/Debit Card, UPI)</Label>
+                    <Label htmlFor="online">Online Payment (Credit/Debit Card)</Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="upi" id="upi" />
+                    <Label htmlFor="upi">UPI Payment</Label>
                   </div>
                 </RadioGroup>
+                
+                {/* UPI Payment Options - Show only when UPI is selected */}
+                {paymentMethod === "upi" && (
+                  <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="upiId">UPI ID</Label>
+                      <Input
+                        id="upiId"
+                        placeholder="yourname@upi"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        required={paymentMethod === "upi"}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Select UPI Provider</Label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                        <div
+                          className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
+                            upiProvider === "phonepe" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
+                          }`}
+                          onClick={() => setUpiProvider("phonepe")}
+                        >
+                          <div className="text-center">
+                            <img 
+                              src="/images/phonepe-logo.png" 
+                              alt="PhonePe" 
+                              className="h-8 mx-auto mb-2" 
+                            />
+                            <span className="text-sm font-medium">PhonePe</span>
+                          </div>
+                        </div>
+                        
+                        <div
+                          className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
+                            upiProvider === "googlepay" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
+                          }`}
+                          onClick={() => setUpiProvider("googlepay")}
+                        >
+                          <div className="text-center">
+                            <img 
+                              src="/images/googlepay-logo.png" 
+                              alt="Google Pay" 
+                              className="h-8 mx-auto mb-2" 
+                            />
+                            <span className="text-sm font-medium">Google Pay</span>
+                          </div>
+                        </div>
+                        
+                        <div
+                          className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
+                            upiProvider === "paytm" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
+                          }`}
+                          onClick={() => setUpiProvider("paytm")}
+                        >
+                          <div className="text-center">
+                            <img 
+                              src="/images/paytm-logo.png" 
+                              alt="Paytm" 
+                              className="h-8 mx-auto mb-2" 
+                            />
+                            <span className="text-sm font-medium">Paytm</span>
+                          </div>
+                        </div>
+                        
+                        <div
+                          className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
+                            upiProvider === "other" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
+                          }`}
+                          onClick={() => setUpiProvider("other")}
+                        >
+                          <div className="text-center">
+                            <Smartphone className="h-8 w-8 mx-auto mb-2 text-gray-500" />
+                            <span className="text-sm font-medium">Other UPI</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Special Instructions */}
