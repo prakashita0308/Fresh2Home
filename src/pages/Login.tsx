@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,10 +39,7 @@ const Login = () => {
         throw error;
       }
       
-      toast({
-        title: "Login successful!",
-        description: "Redirecting to home page...",
-      });
+      toast.success("Login successful! Redirecting to home page...");
       
       // Redirect to home page
       setTimeout(() => {
@@ -51,11 +47,7 @@ const Login = () => {
       }, 1500);
       
     } catch (error: any) {
-      toast({
-        title: "Login failed",
-        description: error.message || "Please check your credentials and try again",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Please check your credentials and try again");
     } finally {
       setIsLoggingIn(false);
     }
@@ -65,11 +57,7 @@ const Login = () => {
     e.preventDefault();
     
     if (signupPassword !== signupConfirmPassword) {
-      toast({
-        title: "Passwords do not match",
-        description: "Please make sure both passwords match",
-        variant: "destructive",
-      });
+      toast.error("Passwords do not match");
       return;
     }
     
@@ -81,7 +69,7 @@ const Login = () => {
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(" ");
       
-      // Sign up the user
+      // Sign up the user with their metadata
       const { data, error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
@@ -96,11 +84,10 @@ const Login = () => {
       if (error) {
         throw error;
       }
+
+      console.log("Sign up successful, user data:", data);
       
-      toast({
-        title: "Account created successfully!",
-        description: "You can now log in with your credentials.",
-      });
+      toast.success("Account created successfully! You can now log in with your credentials.");
       
       // Reset form
       setSignupName("");
@@ -109,11 +96,8 @@ const Login = () => {
       setSignupConfirmPassword("");
       
     } catch (error: any) {
-      toast({
-        title: "Sign up failed",
-        description: error.message || "There was an error creating your account",
-        variant: "destructive",
-      });
+      toast.error(error.message || "There was an error creating your account");
+      console.error("Sign up error:", error);
     } finally {
       setIsSigningUp(false);
     }

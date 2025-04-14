@@ -18,7 +18,7 @@ const Index = () => {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Backend Connection Issue</AlertTitle>
           <AlertDescription>
-            Unable to connect to the backend. Please check your internet connection or try again later.
+            Unable to connect to the backend. Your actions may not be saved. Please check your internet connection or try again later.
           </AlertDescription>
         </Alert>
       )}
