@@ -1,54 +1,122 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
   // State for login form
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
   // State for signup form
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
+  const [isSigningUp, setIsSigningUp] = useState(false);
   
-  const handleLogin = (e: React.FormEvent) => {
+  const navigate = useNavigate();
+  
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // This would normally connect to an authentication service
-    console.log("Login attempt:", { loginEmail, loginPassword });
-    toast.success("Login successful! Redirecting...");
-    // For demo purposes only:
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 2000);
+    setIsLoggingIn(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Login successful!",
+        description: "Redirecting to home page...",
+      });
+      
+      // Redirect to home page
+      setTimeout(() => {
+        navigate("/");
+      }, 1500);
+      
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message || "Please check your credentials and try again",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
   
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (signupPassword !== signupConfirmPassword) {
-      toast.error("Passwords do not match");
+      toast({
+        title: "Passwords do not match",
+        description: "Please make sure both passwords match",
+        variant: "destructive",
+      });
       return;
     }
     
-    // This would normally connect to an authentication service
-    console.log("Signup attempt:", { signupName, signupEmail, signupPassword });
-    toast.success("Account created successfully! You can now log in.");
+    setIsSigningUp(true);
     
-    // Reset form
-    setSignupName("");
-    setSignupEmail("");
-    setSignupPassword("");
-    setSignupConfirmPassword("");
+    try {
+      // Split the full name into first and last name
+      const nameParts = signupName.trim().split(" ");
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ");
+      
+      // Sign up the user
+      const { data, error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName || "",
+          },
+        },
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Account created successfully!",
+        description: "You can now log in with your credentials.",
+      });
+      
+      // Reset form
+      setSignupName("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setSignupConfirmPassword("");
+      
+    } catch (error: any) {
+      toast({
+        title: "Sign up failed",
+        description: error.message || "There was an error creating your account",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSigningUp(false);
+    }
   };
   
   return (
@@ -100,8 +168,12 @@ const Login = () => {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full bg-fresh-orange hover:bg-fresh-red">
-                      Login
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-fresh-orange hover:bg-fresh-red"
+                      disabled={isLoggingIn}
+                    >
+                      {isLoggingIn ? "Logging in..." : "Login"}
                     </Button>
                   </CardFooter>
                 </form>
@@ -161,8 +233,12 @@ const Login = () => {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button type="submit" className="w-full bg-fresh-orange hover:bg-fresh-red">
-                      Create Account
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-fresh-orange hover:bg-fresh-red"
+                      disabled={isSigningUp}
+                    >
+                      {isSigningUp ? "Creating Account..." : "Create Account"}
                     </Button>
                   </CardFooter>
                 </form>
