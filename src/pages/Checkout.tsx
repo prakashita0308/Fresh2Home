@@ -108,19 +108,20 @@ const Checkout = () => {
       return;
     }
     
-    // Validate UPI ID if UPI payment method is selected
-    if (paymentMethod === "upi" && !upiId) {
-      toast.error("Please enter a valid UPI ID");
-      return;
-    }
-    
     // Generate a unique order ID
     const orderId = uuidv4();
     
-    // If PhonePe payment is selected, handle it and return early
-    if (paymentMethod === "phonepe") {
-      const success = await handlePhonePePayment(orderId);
-      if (success) return; // The user will be redirected to PhonePe
+    // Handle different payment methods
+    if (paymentMethod === "upi") {
+      // Check if it's PhonePe UPI option
+      if (upiProvider === "phonepe") {
+        const success = await handlePhonePePayment(orderId);
+        if (success) return; // User will be redirected to PhonePe
+      } else if (!upiId) {
+        // Validate UPI ID for other UPI options
+        toast.error("Please enter a valid UPI ID");
+        return;
+      }
     }
     
     // Process order for other payment methods
@@ -251,33 +252,11 @@ const Checkout = () => {
                     <Label htmlFor="online">Online Payment (Credit/Debit Card)</Label>
                   </div>
                   
-                  <div className="flex items-center space-x-2 mb-3">
-                    <RadioGroupItem value="phonepe" id="phonepe" />
-                    <Label htmlFor="phonepe">PhonePe</Label>
-                  </div>
-                  
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="upi" id="upi" />
                     <Label htmlFor="upi">UPI Payment</Label>
                   </div>
                 </RadioGroup>
-                
-                {/* PhonePe Payment Option */}
-                {paymentMethod === "phonepe" && (
-                  <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
-                    <div className="flex items-center space-x-3">
-                      <img 
-                        src="/images/phonepe-logo.png" 
-                        alt="PhonePe" 
-                        className="h-8" 
-                      />
-                      <div>
-                        <p className="font-medium">Pay using PhonePe</p>
-                        <p className="text-sm text-gray-500">You'll be redirected to PhonePe to complete your payment</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
                 
                 {/* UPI Payment Options - Show only when UPI is selected */}
                 {paymentMethod === "upi" && (
@@ -289,8 +268,12 @@ const Checkout = () => {
                         placeholder="yourname@upi"
                         value={upiId}
                         onChange={(e) => setUpiId(e.target.value)}
-                        required={paymentMethod === "upi"}
+                        required={paymentMethod === "upi" && upiProvider !== "phonepe"}
+                        disabled={upiProvider === "phonepe"}
                       />
+                      {upiProvider === "phonepe" && (
+                        <p className="text-sm text-gray-500">UPI ID not needed for PhonePe direct payment</p>
+                      )}
                     </div>
                     
                     <div className="space-y-2">
@@ -309,6 +292,11 @@ const Checkout = () => {
                               className="h-8 mx-auto mb-2" 
                             />
                             <span className="text-sm font-medium">PhonePe</span>
+                            {upiProvider === "phonepe" && (
+                              <div className="flex items-center justify-center mt-1">
+                                <span className="text-xs text-fresh-orange">Direct Payment</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         
@@ -357,6 +345,22 @@ const Checkout = () => {
                         </div>
                       </div>
                     </div>
+                    
+                    {upiProvider === "phonepe" && (
+                      <div className="mt-4 space-y-4 p-4 bg-white rounded-md border border-gray-200">
+                        <div className="flex items-center space-x-3">
+                          <img 
+                            src="/images/phonepe-logo.png" 
+                            alt="PhonePe" 
+                            className="h-8" 
+                          />
+                          <div>
+                            <p className="font-medium">Pay using PhonePe</p>
+                            <p className="text-sm text-gray-500">You'll be redirected to PhonePe to complete your payment</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
