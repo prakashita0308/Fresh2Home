@@ -1,5 +1,5 @@
 
 project_id = "zpxwupykirsrazbrvdxr"
 
-[functions.seed-menu-items]
-verify_jwt = false
+[functions.create-phonpe-payment]
+verify_jwt = true

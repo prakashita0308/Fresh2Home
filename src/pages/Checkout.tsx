@@ -12,9 +12,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Check, CreditCard, MapPin, Smartphone } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { v4 as uuidv4 } from "uuid";
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
+  const { user, isBackendConnected } = useAuth();
   const navigate = useNavigate();
   
   // If cart is empty, redirect to cart page
@@ -36,6 +40,7 @@ const Checkout = () => {
   const [upiId, setUpiId] = useState("");
   const [upiProvider, setUpiProvider] = useState("phonepe");
   const [specialInstructions, setSpecialInstructions] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
@@ -45,7 +50,55 @@ const Checkout = () => {
     setAddress(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePhonePePayment = async (orderId: string) => {
+    try {
+      setIsProcessing(true);
+      
+      // Check backend connection
+      if (!isBackendConnected) {
+        toast.error("Cannot process payment: Backend is not connected");
+        setIsProcessing(false);
+        return false;
+      }
+      
+      // Call the Supabase edge function to create a PhonePe payment
+      const { data, error } = await supabase.functions.invoke("create-phonpe-payment", {
+        body: {
+          amount: total,
+          redirectUrl: `${window.location.origin}/order-success?orderId=${orderId}`,
+          orderId,
+          customerName: address.fullName,
+          customerPhone: address.phone,
+          customerEmail: user?.email || ""
+        }
+      });
+      
+      if (error) {
+        console.error("Payment error:", error);
+        toast.error("Failed to initiate payment: " + (error.message || "Unknown error"));
+        setIsProcessing(false);
+        return false;
+      }
+      
+      if (data && data.success && data.data && data.data.instrumentResponse && data.data.instrumentResponse.redirectInfo) {
+        // Redirect the user to the PhonePe payment page
+        window.location.href = data.data.instrumentResponse.redirectInfo.url;
+        return true;
+      } else {
+        console.error("Invalid payment response:", data);
+        toast.error("Payment gateway returned an invalid response");
+        setIsProcessing(false);
+        return false;
+      }
+    } catch (err) {
+      console.error("Payment processing error:", err);
+      toast.error("Error processing payment");
+      setIsProcessing(false);
+      return false;
+    }
+  };
+  
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate form
@@ -61,8 +114,21 @@ const Checkout = () => {
       return;
     }
     
-    // Process order - In a real application, this would send data to a server
+    // Generate a unique order ID
+    const orderId = uuidv4();
+    
+    // If PhonePe payment is selected, handle it and return early
+    if (paymentMethod === "phonepe") {
+      const success = await handlePhonePePayment(orderId);
+      if (success) return; // The user will be redirected to PhonePe
+    }
+    
+    // Process order for other payment methods
+    setIsProcessing(true);
+    
+    // In a real application, this would send data to a server
     console.log("Order placed:", {
+      orderId,
       items,
       address,
       paymentMethod,
@@ -71,11 +137,13 @@ const Checkout = () => {
       total
     });
     
-    toast.success("Order placed successfully!");
-    
-    // Clear cart and redirect to success page
-    clearCart();
-    navigate("/order-success");
+    // Simulate processing time
+    setTimeout(() => {
+      toast.success("Order placed successfully!");
+      clearCart();
+      navigate("/order-success");
+      setIsProcessing(false);
+    }, 1500);
   };
   
   return (
@@ -183,11 +251,33 @@ const Checkout = () => {
                     <Label htmlFor="online">Online Payment (Credit/Debit Card)</Label>
                   </div>
                   
+                  <div className="flex items-center space-x-2 mb-3">
+                    <RadioGroupItem value="phonepe" id="phonepe" />
+                    <Label htmlFor="phonepe">PhonePe</Label>
+                  </div>
+                  
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="upi" id="upi" />
                     <Label htmlFor="upi">UPI Payment</Label>
                   </div>
                 </RadioGroup>
+                
+                {/* PhonePe Payment Option */}
+                {paymentMethod === "phonepe" && (
+                  <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <img 
+                        src="/images/phonepe-logo.png" 
+                        alt="PhonePe" 
+                        className="h-8" 
+                      />
+                      <div>
+                        <p className="font-medium">Pay using PhonePe</p>
+                        <p className="text-sm text-gray-500">You'll be redirected to PhonePe to complete your payment</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* UPI Payment Options - Show only when UPI is selected */}
                 {paymentMethod === "upi" && (
@@ -324,8 +414,9 @@ const Checkout = () => {
                 <Button
                   type="submit"
                   className="w-full mt-6 bg-fresh-orange hover:bg-fresh-red"
+                  disabled={isProcessing}
                 >
-                  Place Order
+                  {isProcessing ? "Processing..." : `Place Order (₹${total.toFixed(2)})`}
                 </Button>
               </div>
             </div>
