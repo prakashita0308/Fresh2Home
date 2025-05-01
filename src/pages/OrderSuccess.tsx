@@ -39,12 +39,16 @@ const OrderSuccess = () => {
           }
           
           if (data) {
+            // Safely access the data properties
+            const paymentMethod = data.payment_method || "Cash on Delivery";
+            const paymentStatus = data.status || "Pending";
+            
             setOrderDetails(prev => ({
               ...prev,
-              paymentMethod: data.payment_method === "phonpe" ? "PhonePe UPI" : 
-                            data.payment_method === "upi" ? "UPI QR Code" : "Cash on Delivery",
-              paymentStatus: data.status === "completed" ? "Paid" : 
-                            data.status === "initiated" ? "Processing" : "Failed"
+              paymentMethod: paymentMethod === "phonepe" ? "PhonePe UPI" : 
+                            paymentMethod === "upi" ? "UPI QR Code" : "Cash on Delivery",
+              paymentStatus: paymentStatus === "completed" ? "Paid" : 
+                            paymentStatus === "initiated" ? "Processing" : "Failed"
             }));
           }
         } catch (err) {
