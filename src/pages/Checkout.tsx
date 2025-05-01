@@ -1,5 +1,5 @@
-import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useContext, useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { CartContext } from "@/context/CartContext";
@@ -19,6 +19,9 @@ const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
   const { user, isBackendConnected } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const paymentError = searchParams.get('error');
   
   // If cart is empty, redirect to cart page
   if (items.length === 0) {
@@ -41,9 +44,17 @@ const Checkout = () => {
   const [showQrCode, setShowQrCode] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [orderId, setOrderId] = useState("");
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
+
+  // Check for payment errors
+  useEffect(() => {
+    if (paymentError === 'payment_failed') {
+      toast.error("Payment failed. Please try again.");
+    }
+  }, [paymentError]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -81,6 +92,9 @@ const Checkout = () => {
       }
       
       if (data && data.success && data.data && data.data.instrumentResponse && data.data.instrumentResponse.redirectInfo) {
+        // Save order details before redirecting
+        await saveOrderDetails(orderId, "initiated");
+        
         // Redirect the user to the PhonePe payment page
         window.location.href = data.data.instrumentResponse.redirectInfo.url;
         return true;
@@ -105,14 +119,20 @@ const Checkout = () => {
       // Show toast message to user about scanning QR code
       toast.success("Please scan the QR code and complete payment");
       
+      // Save order with pending status
+      await saveOrderDetails(orderId, "pending");
+      
       // In a real scenario, you would implement a webhook or callback verification
       // For now, we'll use a simple timer to simulate payment verification
       setTimeout(() => {
+        // Update payment status
+        updatePaymentStatus(orderId, "completed");
+        
         toast.success("Payment received! Your order has been placed.");
         clearCart();
-        navigate("/order-success");
+        navigate(`/order-success?orderId=${orderId}&status=success`);
         setIsProcessing(false);
-      }, 3000);
+      }, 5000);
       
       return true;
     } catch (err) {
@@ -120,6 +140,45 @@ const Checkout = () => {
       toast.error("Error processing payment");
       setIsProcessing(false);
       return false;
+    }
+  };
+  
+  const saveOrderDetails = async (orderId: string, status: string) => {
+    if (!isBackendConnected) return;
+    
+    try {
+      // Log payment transaction
+      await supabase.from("payment_transactions").insert({
+        order_id: orderId,
+        amount: total,
+        payment_method: paymentMethod === "upi" ? (showQrCode ? "upi" : upiProvider) : paymentMethod,
+        status: status,
+        customer_details: {
+          name: address.fullName,
+          phone: address.phone,
+          email: user?.email || "",
+          address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`
+        }
+      });
+      
+      // Save order items and details if needed
+      // This would typically be done on the server side after payment confirmation
+      // But for COD, we can do it immediately
+    } catch (err) {
+      console.error("Error saving order details:", err);
+    }
+  };
+  
+  const updatePaymentStatus = async (orderId: string, status: string) => {
+    if (!isBackendConnected) return;
+    
+    try {
+      await supabase.from("payment_transactions").update({
+        status: status,
+        updated_at: new Date().toISOString()
+      }).eq("order_id", orderId);
+    } catch (err) {
+      console.error("Error updating payment status:", err);
     }
   };
   
@@ -134,16 +193,17 @@ const Checkout = () => {
     }
     
     // Generate a unique order ID
-    const orderId = uuidv4();
+    const newOrderId = uuidv4();
+    setOrderId(newOrderId);
     
     // Handle different payment methods
     if (paymentMethod === "upi") {
       if (showQrCode) {
         // Handle QR code payment
-        const success = await handleUpiQrPayment(orderId);
+        const success = await handleUpiQrPayment(newOrderId);
         if (success) return;
       } else if (upiProvider === "phonepe" && !showQrCode) {
-        const success = await handlePhonePePayment(orderId);
+        const success = await handlePhonePePayment(newOrderId);
         if (success) return; // User will be redirected to PhonePe
       } else if (!upiId) {
         // Validate UPI ID for other UPI options
@@ -152,27 +212,25 @@ const Checkout = () => {
       }
     }
     
-    // Process order for other payment methods
+    // Process order for COD payment
     setIsProcessing(true);
     
-    // In a real application, this would send data to a server
-    console.log("Order placed:", {
-      orderId,
-      items,
-      address,
-      paymentMethod,
-      upiDetails: paymentMethod === "upi" ? { upiId, provider: upiProvider } : null,
-      specialInstructions,
-      total
-    });
-    
-    // Simulate processing time
-    setTimeout(() => {
-      toast.success("Order placed successfully!");
-      clearCart();
-      navigate("/order-success");
+    try {
+      // For COD, we confirm the order immediately
+      await saveOrderDetails(newOrderId, "pending");
+      
+      // Simulate processing time
+      setTimeout(() => {
+        toast.success("Order placed successfully!");
+        clearCart();
+        navigate(`/order-success?orderId=${newOrderId}`);
+        setIsProcessing(false);
+      }, 1500);
+    } catch (err) {
+      console.error("Error processing order:", err);
+      toast.error("Failed to place order. Please try again.");
       setIsProcessing(false);
-    }, 1500);
+    }
   };
   
   return (
@@ -314,6 +372,7 @@ const Checkout = () => {
                     </div>
 
                     {!showQrCode ? (
+                      // ... keep existing code (UPI apps section)
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="upiId">UPI ID</Label>

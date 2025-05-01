@@ -1,13 +1,60 @@
 
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Check, ShoppingBag } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const OrderSuccess = () => {
-  // Generate a random order number
-  const orderNumber = Math.floor(100000 + Math.random() * 900000);
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const orderId = searchParams.get('orderId');
+  const status = searchParams.get('status');
+  const { user } = useAuth();
+  
+  const [orderDetails, setOrderDetails] = useState({
+    orderNumber: Math.floor(100000 + Math.random() * 900000),
+    paymentMethod: "Cash on Delivery",
+    paymentStatus: "Pending"
+  });
+  
+  useEffect(() => {
+    const checkPaymentStatus = async () => {
+      if (orderId) {
+        try {
+          // Check payment status in DB
+          const { data, error } = await supabase
+            .from("payment_transactions")
+            .select("status, payment_method")
+            .eq("order_id", orderId)
+            .single();
+          
+          if (error) {
+            console.error("Error fetching payment status:", error);
+            return;
+          }
+          
+          if (data) {
+            setOrderDetails(prev => ({
+              ...prev,
+              paymentMethod: data.payment_method === "phonpe" ? "PhonePe UPI" : 
+                             data.payment_method === "upi" ? "UPI QR Code" : "Cash on Delivery",
+              paymentStatus: data.status === "completed" ? "Paid" : 
+                            data.status === "initiated" ? "Processing" : "Failed"
+            }));
+          }
+        } catch (err) {
+          console.error("Failed to check payment status:", err);
+        }
+      }
+    };
+    
+    checkPaymentStatus();
+  }, [orderId]);
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -27,15 +74,24 @@ const OrderSuccess = () => {
             <h2 className="text-lg font-semibold mb-4">Order Details</h2>
             <div className="flex justify-between mb-2">
               <span className="text-muted-foreground">Order Number:</span>
-              <span className="font-medium">{orderNumber}</span>
+              <span className="font-medium">{orderId || orderDetails.orderNumber}</span>
             </div>
             <div className="flex justify-between mb-2">
               <span className="text-muted-foreground">Estimated Delivery:</span>
               <span className="font-medium">30-45 minutes</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between mb-2">
               <span className="text-muted-foreground">Payment Method:</span>
-              <span className="font-medium">Cash on Delivery</span>
+              <span className="font-medium">{orderDetails.paymentMethod}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payment Status:</span>
+              <span className={`font-medium ${
+                orderDetails.paymentStatus === "Paid" ? "text-fresh-green" : 
+                orderDetails.paymentStatus === "Processing" ? "text-amber-500" : "text-red-500"
+              }`}>
+                {orderDetails.paymentStatus}
+              </span>
             </div>
           </div>
           

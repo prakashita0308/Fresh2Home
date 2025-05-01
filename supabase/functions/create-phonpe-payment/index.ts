@@ -15,6 +15,55 @@ serve(async (req) => {
   }
   
   try {
+    // For payment verification callbacks
+    const url = new URL(req.url);
+    const path = url.pathname.split('/').pop();
+    
+    // Handle payment verification callback
+    if (path === "verify") {
+      const params = Object.fromEntries(url.searchParams);
+      const { orderId, status } = params;
+      
+      if (!orderId) {
+        return new Response(
+          JSON.stringify({ error: "Missing order ID" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Create Supabase client using the service role key for admin access
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // Update the transaction status
+      await supabase.from("payment_transactions").update({
+        status: status === "success" ? "completed" : "failed",
+        updated_at: new Date().toISOString(),
+      }).eq("order_id", orderId);
+      
+      // If payment was successful, redirect to success page
+      if (status === "success") {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            ...corsHeaders,
+            "Location": `${url.origin}/order-success?orderId=${orderId}&status=success`
+          }
+        });
+      } else {
+        // If payment failed, redirect to checkout with error
+        return new Response(null, {
+          status: 302,
+          headers: {
+            ...corsHeaders,
+            "Location": `${url.origin}/checkout?error=payment_failed`
+          }
+        });
+      }
+    }
+    
+    // Handle payment creation requests
     const { amount, redirectUrl, orderId, customerName, customerPhone, customerEmail } = await req.json();
     
     // Validate the request payload
@@ -37,6 +86,9 @@ serve(async (req) => {
       );
     }
 
+    // Create verify URL for callback
+    const verifyCallbackUrl = `${new URL(req.url).origin}/verify?orderId=${orderId}`;
+    
     // Create the PhonePe payload
     const payload = {
       merchantId: PHONPE_MERCHANT_ID,
@@ -45,7 +97,7 @@ serve(async (req) => {
       merchantUserId: "MERCHANT_USER_ID", // You can replace this with an actual user ID if available
       redirectUrl: redirectUrl,
       redirectMode: "REDIRECT",
-      callbackUrl: redirectUrl, // Can be different from redirectUrl if needed
+      callbackUrl: verifyCallbackUrl, // Using the verification callback
       paymentInstrument: {
         type: "PAY_PAGE"
       },
