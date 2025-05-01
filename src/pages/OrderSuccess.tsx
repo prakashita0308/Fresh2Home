@@ -22,6 +22,9 @@ const OrderSuccess = () => {
     paymentStatus: "Pending"
   });
   
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [paymentRefId, setPaymentRefId] = useState("");
+  
   useEffect(() => {
     const checkPaymentStatus = async () => {
       if (orderId) {
@@ -35,6 +38,7 @@ const OrderSuccess = () => {
           
           if (error) {
             console.error("Error fetching order status:", error);
+            toast.error("Failed to fetch order details");
             return;
           }
           
@@ -58,12 +62,64 @@ const OrderSuccess = () => {
           }
         } catch (err) {
           console.error("Failed to check payment status:", err);
+          toast.error("Something went wrong while checking payment status");
         }
       }
     };
     
     checkPaymentStatus();
   }, [orderId]);
+
+  const handleVerifyPayment = async () => {
+    if (!paymentRefId.trim()) {
+      toast.error("Please enter a valid payment reference ID");
+      return;
+    }
+    
+    setVerifyingPayment(true);
+    
+    try {
+      // Add a validation check to verify payment reference ID
+      // This is a simple validation - replace with actual verification logic
+      const isValidPayment = /^[A-Za-z0-9]{6,}$/.test(paymentRefId.trim());
+      
+      if (!isValidPayment) {
+        toast.error("Invalid payment reference ID format");
+        setVerifyingPayment(false);
+        return;
+      }
+      
+      // Update the order status in the database
+      const { error } = await supabase
+        .from("orders")
+        .update({ 
+          status: "completed",
+          payment_ref_id: paymentRefId.trim()
+        })
+        .eq("id", orderId);
+      
+      if (error) {
+        console.error("Error verifying payment:", error);
+        toast.error("Failed to verify payment. Please try again.");
+        setVerifyingPayment(false);
+        return;
+      }
+      
+      toast.success("Payment verified successfully!");
+      
+      // Update the order details locally
+      setOrderDetails(prev => ({
+        ...prev,
+        paymentStatus: "Paid"
+      }));
+      
+    } catch (err) {
+      console.error("Payment verification failed:", err);
+      toast.error("Something went wrong while verifying payment");
+    } finally {
+      setVerifyingPayment(false);
+    }
+  };
 
   const getPaymentStatusIcon = () => {
     switch (orderDetails.paymentStatus) {
@@ -121,11 +177,35 @@ const OrderSuccess = () => {
             </div>
             
             {orderDetails.paymentStatus === "Awaiting Confirmation" && (
-              <div className="mt-4 p-3 bg-blue-50 rounded-md text-sm">
-                <p className="text-blue-700">
-                  Your payment is awaiting confirmation from the restaurant owner. 
-                  This usually takes just a few minutes. Thank you for your patience!
-                </p>
+              <div className="mt-4">
+                <div className="p-3 bg-blue-50 rounded-md text-sm mb-4">
+                  <p className="text-blue-700">
+                    Your payment is awaiting confirmation. Please enter the UPI transaction reference ID to verify your payment.
+                  </p>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input 
+                      type="text" 
+                      value={paymentRefId}
+                      onChange={(e) => setPaymentRefId(e.target.value)}
+                      placeholder="UPI Transaction ID"
+                      className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                    />
+                    <Button 
+                      onClick={handleVerifyPayment}
+                      disabled={verifyingPayment || !paymentRefId.trim()}
+                      className="bg-fresh-orange hover:bg-fresh-red text-sm"
+                    >
+                      {verifyingPayment ? "Verifying..." : "Verify Payment"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Enter the UPI reference ID you received after completing the payment.
+                    This helps us verify your payment faster.
+                  </p>
+                </div>
               </div>
             )}
           </div>
