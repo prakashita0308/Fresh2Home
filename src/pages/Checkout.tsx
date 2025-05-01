@@ -1,4 +1,3 @@
-
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -101,13 +100,15 @@ const Checkout = () => {
   
   const handleUpiQrPayment = async (orderId: string) => {
     try {
-      // Manual QR code verification process
+      setIsProcessing(true);
+      
+      // Show toast message to user about scanning QR code
       toast.success("Please scan the QR code and complete payment");
       
       // In a real scenario, you would implement a webhook or callback verification
       // For now, we'll use a simple timer to simulate payment verification
       setTimeout(() => {
-        toast.success("Order placed successfully!");
+        toast.success("Payment received! Your order has been placed.");
         clearCart();
         navigate("/order-success");
         setIsProcessing(false);
@@ -137,14 +138,13 @@ const Checkout = () => {
     
     // Handle different payment methods
     if (paymentMethod === "upi") {
-      // Check if it's PhonePe UPI option
-      if (upiProvider === "phonepe" && !showQrCode) {
-        const success = await handlePhonePePayment(orderId);
-        if (success) return; // User will be redirected to PhonePe
-      } else if (showQrCode) {
+      if (showQrCode) {
         // Handle QR code payment
         const success = await handleUpiQrPayment(orderId);
         if (success) return;
+      } else if (upiProvider === "phonepe" && !showQrCode) {
+        const success = await handlePhonePePayment(orderId);
+        if (success) return; // User will be redirected to PhonePe
       } else if (!upiId) {
         // Validate UPI ID for other UPI options
         toast.error("Please enter a valid UPI ID");
@@ -425,21 +425,16 @@ const Checkout = () => {
                         
                         <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
                           <img 
-                            src="/images/upi-qr.png" 
-                            alt="UPI QR Code" 
-                            className="h-56 w-56"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.onerror = null;
-                              target.src = "https://via.placeholder.com/200x200?text=Your+UPI+QR+Code";
-                            }} 
+                            src="/lovable-uploads/34adac09-d329-4b09-9f69-e59ff0a5cb02.png" 
+                            alt="PhonePe QR Code" 
+                            className="h-64 w-auto"
                           />
                         </div>
                         
                         <div className="text-center space-y-2">
                           <p className="font-medium">Total Amount: ₹{total.toFixed(2)}</p>
                           <p className="text-sm text-gray-600">Scan this QR code with any UPI app</p>
-                          <p className="text-sm font-medium text-fresh-orange">Pay to: yourname@upi</p>
+                          <p className="text-sm font-medium text-fresh-orange">Pay to: ******7955</p>
                         </div>
                       </div>
                     )}
