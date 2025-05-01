@@ -1,3 +1,4 @@
+
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -14,6 +15,8 @@ import { Check, CreditCard, MapPin, Smartphone, QrCode } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
@@ -39,12 +42,13 @@ const Checkout = () => {
   });
   
   const [paymentMethod, setPaymentMethod] = useState("cod");
-  const [upiId, setUpiId] = useState("");
-  const [upiProvider, setUpiProvider] = useState("phonepe");
   const [showQrCode, setShowQrCode] = useState(false);
+  const [selectedQr, setSelectedQr] = useState("default"); // "default" or "owner"
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderId, setOrderId] = useState("");
+  const [showQrDialog, setShowQrDialog] = useState(false);
+  const [paymentConfirmationNumber, setPaymentConfirmationNumber] = useState("");
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
@@ -112,28 +116,19 @@ const Checkout = () => {
     }
   };
   
-  const handleUpiQrPayment = async (orderId: string) => {
+  const handleQrPayment = async (orderId: string) => {
     try {
       setIsProcessing(true);
       
-      // Show toast message to user about scanning QR code
-      toast.success("Please scan the QR code and complete payment");
+      const paymentType = selectedQr === "owner" ? "myqr" : "upi";
       
-      // Save order with pending status
-      await saveOrderDetails(orderId, "pending", "upi");
+      // Save order with awaiting confirmation status
+      await saveOrderDetails(orderId, "awaiting_confirmation", paymentType);
       
-      // In a real scenario, you would implement a webhook or callback verification
-      // For now, we'll use a simple timer to simulate payment verification
-      setTimeout(() => {
-        // Update payment status
-        updatePaymentStatus(orderId, "completed");
-        
-        toast.success("Payment received! Your order has been placed.");
-        clearCart();
-        navigate(`/order-success?orderId=${orderId}&status=success`);
-        setIsProcessing(false);
-      }, 5000);
-      
+      toast.success("Order placed! Please wait for payment confirmation.");
+      clearCart();
+      navigate(`/order-success?orderId=${orderId}`);
+      setIsProcessing(false);
       return true;
     } catch (err) {
       console.error("Payment processing error:", err);
@@ -166,19 +161,6 @@ const Checkout = () => {
     }
   };
   
-  const updatePaymentStatus = async (orderId: string, status: string) => {
-    if (!isBackendConnected) return;
-    
-    try {
-      await supabase.from("orders").update({
-        status: status,
-        updated_at: new Date().toISOString()
-      }).eq("id", orderId);
-    } catch (err) {
-      console.error("Error updating payment status:", err);
-    }
-  };
-  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -194,19 +176,22 @@ const Checkout = () => {
     setOrderId(newOrderId);
     
     // Handle different payment methods
-    if (paymentMethod === "upi") {
-      if (showQrCode) {
-        // Handle QR code payment
-        const success = await handleUpiQrPayment(newOrderId);
+    if (paymentMethod === "qr") {
+      if (showQrDialog) {
+        if (!paymentConfirmationNumber) {
+          toast.error("Please enter the payment confirmation number");
+          return;
+        }
+        const success = await handleQrPayment(newOrderId);
         if (success) return;
-      } else if (upiProvider === "phonepe" && !showQrCode) {
-        const success = await handlePhonePePayment(newOrderId);
-        if (success) return; // User will be redirected to PhonePe
-      } else if (!upiId) {
-        // Validate UPI ID for other UPI options
-        toast.error("Please enter a valid UPI ID");
+      } else {
+        // Show QR code dialog
+        setShowQrDialog(true);
         return;
       }
+    } else if (paymentMethod === "phonepe") {
+      const success = await handlePhonePePayment(newOrderId);
+      if (success) return; // User will be redirected to PhonePe
     }
     
     // Process order for COD payment
@@ -317,182 +302,139 @@ const Checkout = () => {
                 </div>
               </div>
               
-              {/* Payment Method Section */}
+              {/* Payment Method Section - Completely Redesigned */}
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center mb-4">
+                <div className="flex items-center mb-6">
                   <CreditCard className="h-5 w-5 mr-2 text-fresh-orange" />
                   <h2 className="text-xl font-semibold">Payment Method</h2>
                 </div>
                 
-                <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <div className="flex items-center space-x-2 mb-3">
-                    <RadioGroupItem value="cod" id="cod" />
-                    <Label htmlFor="cod">Cash on Delivery</Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 mb-3">
-                    <RadioGroupItem value="online" id="online" />
-                    <Label htmlFor="online">Online Payment (Credit/Debit Card)</Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="upi" id="upi" />
-                    <Label htmlFor="upi">UPI Payment</Label>
-                  </div>
-                </RadioGroup>
-                
-                {/* UPI Payment Options - Show only when UPI is selected */}
-                {paymentMethod === "upi" && (
-                  <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
-                    <div className="flex justify-between items-center">
-                      <Label>Payment Method</Label>
-                      <div className="flex items-center space-x-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="sm"
-                          className={!showQrCode ? "bg-fresh-orange/10 border-fresh-orange text-fresh-orange" : ""}
-                          onClick={() => setShowQrCode(false)}
-                        >
-                          UPI Apps
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="sm"
-                          className={showQrCode ? "bg-fresh-orange/10 border-fresh-orange text-fresh-orange" : ""}
-                          onClick={() => setShowQrCode(true)}
-                        >
-                          QR Code
-                        </Button>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Cash on Delivery */}
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      paymentMethod === 'cod' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setPaymentMethod('cod')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                          paymentMethod === 'cod' ? 'border-fresh-orange' : 'border-gray-300'
+                        }`}>
+                          {paymentMethod === 'cod' && <div className="w-3 h-3 rounded-full bg-fresh-orange"></div>}
+                        </div>
+                        <span className="ml-2 font-medium">Cash on Delivery</span>
                       </div>
                     </div>
+                    <div className="flex items-center justify-center bg-gray-100 rounded-md py-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 text-center">Pay with cash upon delivery</p>
+                  </div>
 
-                    {!showQrCode ? (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="upiId">UPI ID</Label>
-                          <Input
-                            id="upiId"
-                            placeholder="yourname@upi"
-                            value={upiId}
-                            onChange={(e) => setUpiId(e.target.value)}
-                            required={paymentMethod === "upi" && upiProvider !== "phonepe"}
-                            disabled={upiProvider === "phonepe"}
-                          />
-                          {upiProvider === "phonepe" && (
-                            <p className="text-sm text-gray-500">UPI ID not needed for PhonePe direct payment</p>
-                          )}
+                  {/* PhonePe */}
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      paymentMethod === 'phonepe' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setPaymentMethod('phonepe')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                          paymentMethod === 'phonepe' ? 'border-fresh-orange' : 'border-gray-300'
+                        }`}>
+                          {paymentMethod === 'phonepe' && <div className="w-3 h-3 rounded-full bg-fresh-orange"></div>}
                         </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Select UPI Provider</Label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
-                            <div
-                              className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
-                                upiProvider === "phonepe" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
-                              }`}
-                              onClick={() => setUpiProvider("phonepe")}
-                            >
-                              <div className="text-center">
-                                <img 
-                                  src="/images/phonepe-logo.png" 
-                                  alt="PhonePe" 
-                                  className="h-8 mx-auto mb-2" 
-                                />
-                                <span className="text-sm font-medium">PhonePe</span>
-                                {upiProvider === "phonepe" && (
-                                  <div className="flex items-center justify-center mt-1">
-                                    <span className="text-xs text-fresh-orange">Direct Payment</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div
-                              className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
-                                upiProvider === "googlepay" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
-                              }`}
-                              onClick={() => setUpiProvider("googlepay")}
-                            >
-                              <div className="text-center">
-                                <img 
-                                  src="/images/googlepay-logo.png" 
-                                  alt="Google Pay" 
-                                  className="h-8 mx-auto mb-2" 
-                                />
-                                <span className="text-sm font-medium">Google Pay</span>
-                              </div>
-                            </div>
-                            
-                            <div
-                              className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
-                                upiProvider === "paytm" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
-                              }`}
-                              onClick={() => setUpiProvider("paytm")}
-                            >
-                              <div className="text-center">
-                                <img 
-                                  src="/images/paytm-logo.png" 
-                                  alt="Paytm" 
-                                  className="h-8 mx-auto mb-2" 
-                                />
-                                <span className="text-sm font-medium">Paytm</span>
-                              </div>
-                            </div>
-                            
-                            <div
-                              className={`cursor-pointer border rounded-md p-4 flex items-center justify-center ${
-                                upiProvider === "other" ? "border-fresh-orange bg-fresh-orange/10" : "border-gray-200"
-                              }`}
-                              onClick={() => setUpiProvider("other")}
-                            >
-                              <div className="text-center">
-                                <Smartphone className="h-8 w-8 mx-auto mb-2 text-gray-500" />
-                                <span className="text-sm font-medium">Other UPI</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {upiProvider === "phonepe" && (
-                          <div className="mt-4 space-y-4 p-4 bg-white rounded-md border border-gray-200">
-                            <div className="flex items-center space-x-3">
-                              <img 
-                                src="/images/phonepe-logo.png" 
-                                alt="PhonePe" 
-                                className="h-8" 
-                              />
-                              <div>
-                                <p className="font-medium">Pay using PhonePe</p>
-                                <p className="text-sm text-gray-500">You'll be redirected to PhonePe to complete your payment</p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-6 bg-white rounded-md border border-gray-200">
-                        <div className="mb-4">
-                          <QrCode className="h-6 w-6 text-fresh-orange mb-2 mx-auto" />
-                          <h3 className="text-lg font-medium text-center">Scan & Pay</h3>
-                        </div>
-                        
-                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
-                          <img 
-                            src="/lovable-uploads/34adac09-d329-4b09-9f69-e59ff0a5cb02.png" 
-                            alt="PhonePe QR Code" 
-                            className="h-64 w-auto"
-                          />
-                        </div>
-                        
-                        <div className="text-center space-y-2">
-                          <p className="font-medium">Total Amount: ₹{total.toFixed(2)}</p>
-                          <p className="text-sm text-gray-600">Scan this QR code with any UPI app</p>
-                          <p className="text-sm font-medium text-fresh-orange">Pay to: ******7955</p>
-                        </div>
+                        <span className="ml-2 font-medium">PhonePe</span>
                       </div>
-                    )}
+                    </div>
+                    <div className="flex items-center justify-center bg-gray-100 rounded-md py-3">
+                      <img 
+                        src="/images/phonepe-logo.png" 
+                        alt="PhonePe" 
+                        className="h-6" 
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 text-center">Secure online payment</p>
+                  </div>
+
+                  {/* QR Code Payment */}
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      paymentMethod === 'qr' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setPaymentMethod('qr')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                          paymentMethod === 'qr' ? 'border-fresh-orange' : 'border-gray-300'
+                        }`}>
+                          {paymentMethod === 'qr' && <div className="w-3 h-3 rounded-full bg-fresh-orange"></div>}
+                        </div>
+                        <span className="ml-2 font-medium">QR Code</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center bg-gray-100 rounded-md py-3">
+                      <QrCode className="h-6 w-6 text-gray-500" />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 text-center">Scan QR code to pay</p>
+                  </div>
+                </div>
+
+                {paymentMethod === 'qr' && (
+                  <div className="mt-6 p-4 border rounded-lg border-gray-200 bg-gray-50">
+                    <h3 className="text-sm font-medium mb-3">Select QR Code Type</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Owner's QR */}
+                      <div 
+                        className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                          selectedQr === 'owner' ? 'border-fresh-orange bg-white' : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedQr('owner')}
+                      >
+                        <div className="flex items-center">
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            selectedQr === 'owner' ? 'border-fresh-orange' : 'border-gray-300'
+                          }`}>
+                            {selectedQr === 'owner' && <div className="w-2 h-2 rounded-full bg-fresh-orange"></div>}
+                          </div>
+                          <span className="ml-2 font-medium">Owner's Personal UPI</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 ml-6">Pay directly to restaurant owner's UPI ID</p>
+                      </div>
+                      
+                      {/* Generic UPI QR */}
+                      <div 
+                        className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                          selectedQr === 'default' ? 'border-fresh-orange bg-white' : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedQr('default')}
+                      >
+                        <div className="flex items-center">
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            selectedQr === 'default' ? 'border-fresh-orange' : 'border-gray-300'
+                          }`}>
+                            {selectedQr === 'default' && <div className="w-2 h-2 rounded-full bg-fresh-orange"></div>}
+                          </div>
+                          <span className="ml-2 font-medium">Restaurant UPI</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 ml-6">Pay to restaurant's business UPI ID</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 text-sm text-fresh-orange">
+                      <p className="font-medium">Important Note:</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        After scanning and paying via QR code, your order will be in "Awaiting Confirmation" status 
+                        until the restaurant owner confirms receipt of the payment. This usually takes just a few minutes.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -559,6 +501,67 @@ const Checkout = () => {
           </div>
         </form>
       </main>
+      
+      {/* QR Code Dialog */}
+      <Dialog open={showQrDialog} onOpenChange={setShowQrDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Scan & Pay</DialogTitle>
+            <DialogDescription>
+              Scan the QR code below to complete your payment of ₹{total.toFixed(2)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col items-center justify-center p-4">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+              <img 
+                src={selectedQr === "owner" 
+                  ? "/lovable-uploads/34adac09-d329-4b09-9f69-e59ff0a5cb02.png" 
+                  : "/lovable-uploads/34adac09-d329-4b09-9f69-e59ff0a5cb02.png"} 
+                alt="QR Code" 
+                className="h-64 w-auto"
+              />
+            </div>
+            
+            <div className="w-full space-y-4">
+              <div className="text-center">
+                <p className="font-medium text-lg">Total: ₹{total.toFixed(2)}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedQr === "owner" 
+                    ? "Pay to: Restaurant Owner (PersonalID@upi)" 
+                    : "Pay to: Restaurant Business (BusinessID@upi)"}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="confirmationNumber">Enter UPI Reference Number</Label>
+                <Input 
+                  id="confirmationNumber"
+                  value={paymentConfirmationNumber}
+                  onChange={(e) => setPaymentConfirmationNumber(e.target.value)}
+                  placeholder="e.g., UPI123456789"
+                  required
+                />
+                <p className="text-xs text-gray-500">
+                  This helps us verify your payment quickly
+                </p>
+              </div>
+              
+              <Button 
+                className="w-full bg-fresh-orange hover:bg-fresh-red"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }}
+                disabled={!paymentConfirmationNumber}
+              >
+                Confirm Payment & Place Order
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <Footer />
     </div>
   );

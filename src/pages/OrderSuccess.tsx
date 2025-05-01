@@ -1,7 +1,7 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, ShoppingBag } from "lucide-react";
+import { Check, ShoppingBag, Clock, CircleCheck, CreditCard } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
@@ -39,16 +39,21 @@ const OrderSuccess = () => {
           }
           
           if (data) {
+            // Type guard to ensure we don't access properties that might not exist
+            const orderData = data as { payment_method?: string, status?: string } | null;
+            
             // Safely access the data properties
-            const paymentMethod = data.payment_method || "Cash on Delivery";
-            const paymentStatus = data.status || "Pending";
+            const paymentMethod = orderData?.payment_method || "Cash on Delivery";
+            const paymentStatus = orderData?.status || "Pending";
             
             setOrderDetails(prev => ({
               ...prev,
               paymentMethod: paymentMethod === "phonepe" ? "PhonePe UPI" : 
-                            paymentMethod === "upi" ? "UPI QR Code" : "Cash on Delivery",
+                            paymentMethod === "upi" ? "QR Code Payment" : 
+                            paymentMethod === "myqr" ? "Owner's QR Payment" : "Cash on Delivery",
               paymentStatus: paymentStatus === "completed" ? "Paid" : 
-                            paymentStatus === "initiated" ? "Processing" : "Failed"
+                            paymentStatus === "initiated" ? "Processing" : 
+                            paymentStatus === "awaiting_confirmation" ? "Awaiting Confirmation" : "Pending"
             }));
           }
         } catch (err) {
@@ -59,6 +64,19 @@ const OrderSuccess = () => {
     
     checkPaymentStatus();
   }, [orderId]);
+
+  const getPaymentStatusIcon = () => {
+    switch (orderDetails.paymentStatus) {
+      case "Paid":
+        return <CircleCheck className="h-5 w-5 text-fresh-green" />;
+      case "Processing":
+        return <Clock className="h-5 w-5 text-amber-500" />;
+      case "Awaiting Confirmation":
+        return <Clock className="h-5 w-5 text-blue-500" />;
+      default:
+        return <CreditCard className="h-5 w-5 text-gray-500" />;
+    }
+  };
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -88,15 +106,28 @@ const OrderSuccess = () => {
               <span className="text-muted-foreground">Payment Method:</span>
               <span className="font-medium">{orderDetails.paymentMethod}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Payment Status:</span>
-              <span className={`font-medium ${
-                orderDetails.paymentStatus === "Paid" ? "text-fresh-green" : 
-                orderDetails.paymentStatus === "Processing" ? "text-amber-500" : "text-red-500"
-              }`}>
-                {orderDetails.paymentStatus}
-              </span>
+              <div className="flex items-center gap-2">
+                {getPaymentStatusIcon()}
+                <span className={`font-medium ${
+                  orderDetails.paymentStatus === "Paid" ? "text-fresh-green" : 
+                  orderDetails.paymentStatus === "Processing" ? "text-amber-500" : 
+                  orderDetails.paymentStatus === "Awaiting Confirmation" ? "text-blue-500" : "text-red-500"
+                }`}>
+                  {orderDetails.paymentStatus}
+                </span>
+              </div>
             </div>
+            
+            {orderDetails.paymentStatus === "Awaiting Confirmation" && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-md text-sm">
+                <p className="text-blue-700">
+                  Your payment is awaiting confirmation from the restaurant owner. 
+                  This usually takes just a few minutes. Thank you for your patience!
+                </p>
+              </div>
+            )}
           </div>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
