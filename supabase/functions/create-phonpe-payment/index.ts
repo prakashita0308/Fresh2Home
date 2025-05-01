@@ -36,11 +36,11 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // Update the transaction status
-      await supabase.from("payment_transactions").update({
+      // Update the order status
+      await supabase.from("orders").update({
         status: status === "success" ? "completed" : "failed",
         updated_at: new Date().toISOString(),
-      }).eq("order_id", orderId);
+      }).eq("id", orderId);
       
       // If payment was successful, redirect to success page
       if (status === "success") {
@@ -143,14 +143,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Log the payment attempt in the database
-    await supabase.from("payment_transactions").insert({
-      order_id: orderId,
-      amount: amount,
-      payment_method: "phonpe",
-      status: responseData.success ? "initiated" : "failed",
-      transaction_details: responseData
-    });
+    // Update the order status with payment details
+    if (responseData.success) {
+      await supabase.from("orders").update({
+        payment_method: "phonepe",
+        status: "initiated",
+        updated_at: new Date().toISOString()
+      }).eq("id", orderId);
+    }
     
     // Return the PhonePe response
     return new Response(

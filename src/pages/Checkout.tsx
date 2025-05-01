@@ -93,7 +93,7 @@ const Checkout = () => {
       
       if (data && data.success && data.data && data.data.instrumentResponse && data.data.instrumentResponse.redirectInfo) {
         // Save order details before redirecting
-        await saveOrderDetails(orderId, "initiated");
+        await saveOrderDetails(orderId, "initiated", "phonepe");
         
         // Redirect the user to the PhonePe payment page
         window.location.href = data.data.instrumentResponse.redirectInfo.url;
@@ -120,7 +120,7 @@ const Checkout = () => {
       toast.success("Please scan the QR code and complete payment");
       
       // Save order with pending status
-      await saveOrderDetails(orderId, "pending");
+      await saveOrderDetails(orderId, "pending", "upi");
       
       // In a real scenario, you would implement a webhook or callback verification
       // For now, we'll use a simple timer to simulate payment verification
@@ -143,22 +143,19 @@ const Checkout = () => {
     }
   };
   
-  const saveOrderDetails = async (orderId: string, status: string) => {
+  const saveOrderDetails = async (orderId: string, status: string, payment_method: string) => {
     if (!isBackendConnected) return;
     
     try {
-      // Log payment transaction
-      await supabase.from("payment_transactions").insert({
-        order_id: orderId,
-        amount: total,
-        payment_method: paymentMethod === "upi" ? (showQrCode ? "upi" : upiProvider) : paymentMethod,
+      // Create new order
+      await supabase.from("orders").insert({
+        id: orderId,
         status: status,
-        customer_details: {
-          name: address.fullName,
-          phone: address.phone,
-          email: user?.email || "",
-          address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`
-        }
+        payment_method: payment_method,
+        total: total,
+        delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
+        phone: address.phone,
+        user_id: user?.id
       });
       
       // Save order items and details if needed
@@ -173,10 +170,10 @@ const Checkout = () => {
     if (!isBackendConnected) return;
     
     try {
-      await supabase.from("payment_transactions").update({
+      await supabase.from("orders").update({
         status: status,
         updated_at: new Date().toISOString()
-      }).eq("order_id", orderId);
+      }).eq("id", orderId);
     } catch (err) {
       console.error("Error updating payment status:", err);
     }
@@ -217,7 +214,7 @@ const Checkout = () => {
     
     try {
       // For COD, we confirm the order immediately
-      await saveOrderDetails(newOrderId, "pending");
+      await saveOrderDetails(newOrderId, "pending", "cod");
       
       // Simulate processing time
       setTimeout(() => {
@@ -372,7 +369,6 @@ const Checkout = () => {
                     </div>
 
                     {!showQrCode ? (
-                      // ... keep existing code (UPI apps section)
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="upiId">UPI ID</Label>

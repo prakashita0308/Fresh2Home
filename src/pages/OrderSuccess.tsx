@@ -26,15 +26,15 @@ const OrderSuccess = () => {
     const checkPaymentStatus = async () => {
       if (orderId) {
         try {
-          // Check payment status in DB
+          // Check order status in DB
           const { data, error } = await supabase
-            .from("payment_transactions")
+            .from("orders")
             .select("status, payment_method")
-            .eq("order_id", orderId)
+            .eq("id", orderId)
             .single();
           
           if (error) {
-            console.error("Error fetching payment status:", error);
+            console.error("Error fetching order status:", error);
             return;
           }
           
@@ -42,7 +42,7 @@ const OrderSuccess = () => {
             setOrderDetails(prev => ({
               ...prev,
               paymentMethod: data.payment_method === "phonpe" ? "PhonePe UPI" : 
-                             data.payment_method === "upi" ? "UPI QR Code" : "Cash on Delivery",
+                            data.payment_method === "upi" ? "UPI QR Code" : "Cash on Delivery",
               paymentStatus: data.status === "completed" ? "Paid" : 
                             data.status === "initiated" ? "Processing" : "Failed"
             }));
