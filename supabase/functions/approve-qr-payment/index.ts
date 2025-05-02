@@ -8,6 +8,34 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Simple email sending function
+async function sendEmail(to: string, subject: string, body: string) {
+  try {
+    console.log(`Sending email to ${to} with subject: ${subject}`);
+    console.log(`Email body: ${body}`);
+    
+    // In a production environment, you'd integrate with an email service like SendGrid or Resend
+    // This is a placeholder for now - the logs will show what would be sent
+    
+    return { success: true, message: "Email notification would be sent (check logs)" };
+  } catch (error) {
+    console.error("Failed to send email:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Basic UPI reference ID validation
+function isValidReferenceId(refId: string): boolean {
+  if (!refId || refId.trim().length < 6) {
+    return false;
+  }
+  
+  // Basic format check for common UPI reference formats
+  // UPI ids are typically alphanumeric and at least 6 characters
+  const upiRegex = /^[A-Za-z0-9]{6,}$/;
+  return upiRegex.test(refId.trim());
+}
+
 serve(async (req) => {
   // Get query parameters from URL
   const url = new URL(req.url);
@@ -31,7 +59,7 @@ serve(async (req) => {
     // Check if the order exists and is in the pending_owner_approval state
     const { data: orderData, error: fetchError } = await supabase
       .from("orders")
-      .select("*")
+      .select("*, profiles(first_name, last_name, email)")
       .eq("id", orderId)
       .eq("status", "pending_owner_approval")
       .maybeSingle();
@@ -49,6 +77,34 @@ serve(async (req) => {
         JSON.stringify({ error: "Order not found or already processed" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+    
+    // Validate reference ID if approving
+    if (action === "approve" && refId) {
+      if (!isValidReferenceId(refId)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid payment reference ID format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Check if this reference ID has been used in another order
+      const { data: existingOrder, error: refCheckError } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("payment_ref_id", refId)
+        .eq("status", "completed")
+        .neq("id", orderId)
+        .maybeSingle();
+        
+      if (refCheckError) {
+        console.error("Error checking reference ID:", refCheckError);
+      } else if (existingOrder) {
+        return new Response(
+          JSON.stringify({ error: "This payment reference ID has already been used for another order" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
     
     // Update the order status based on the action
@@ -69,6 +125,31 @@ serve(async (req) => {
         JSON.stringify({ error: "Failed to update order status" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+    
+    // Send confirmation email to the owner if the payment was approved
+    if (action === "approve") {
+      const ownerEmail = Deno.env.get("OWNER_EMAIL") || "";
+      
+      if (ownerEmail) {
+        const subject = `Payment Approved for Order #${orderId.substring(0, 8)}`;
+        const emailBody = `
+          <h2>Payment Approved Successfully</h2>
+          <p>You have approved the payment for order #${orderId.substring(0, 8)}.</p>
+          
+          <h3>Order Details:</h3>
+          <ul>
+            <li><strong>Order ID:</strong> ${orderId}</li>
+            <li><strong>Amount:</strong> ₹${orderData.total.toFixed(2)}</li>
+            <li><strong>Payment Reference:</strong> ${refId || orderData.payment_ref_id || 'N/A'}</li>
+            <li><strong>Delivery Address:</strong> ${orderData.delivery_address || 'N/A'}</li>
+          </ul>
+          
+          <p>The customer has been notified that their payment was approved.</p>
+        `;
+        
+        await sendEmail(ownerEmail, subject, emailBody);
+      }
     }
     
     // Return a simple HTML response with the result
@@ -131,6 +212,7 @@ serve(async (req) => {
           <p><strong>Order ID:</strong> ${orderId}</p>
           <p><strong>Status:</strong> ${newStatus}</p>
           <p><strong>Action taken:</strong> ${action}</p>
+          ${refId ? `<p><strong>Payment Reference:</strong> ${refId}</p>` : ''}
         </div>
       </div>
     </body>

@@ -1,7 +1,7 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Check, ShoppingBag, Clock, CircleCheck, CreditCard, AlertCircle } from "lucide-react";
+import { Check, ShoppingBag, Clock, CircleCheck, CreditCard, AlertCircle, AlertTriangle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
@@ -26,6 +26,7 @@ const OrderSuccess = () => {
   const [paymentRefId, setPaymentRefId] = useState("");
   const [lastCheckTime, setLastCheckTime] = useState(Date.now());
   const [isPolling, setIsPolling] = useState(false);
+  const [refIdError, setRefIdError] = useState("");
   
   // Function to check payment status
   const checkPaymentStatus = async () => {
@@ -111,20 +112,29 @@ const OrderSuccess = () => {
   }, [orderDetails.paymentStatus, isPolling]);
 
   const validatePaymentRefId = (refId: string) => {
+    // If empty
+    if (!refId.trim()) {
+      setRefIdError("Please enter a payment reference ID");
+      return false;
+    }
+    
     // Basic validation: At least 6 alphanumeric characters, common patterns for UPI IDs
     const refIdRegex = /^[A-Za-z0-9]{6,}$/;
-    return refIdRegex.test(refId.trim());
+    if (!refIdRegex.test(refId.trim())) {
+      setRefIdError("Invalid reference ID format. Please enter a valid UPI transaction ID");
+      return false;
+    }
+    
+    setRefIdError("");
+    return true;
   };
 
   const handleVerifyPayment = async () => {
-    if (!paymentRefId.trim()) {
-      toast.error("Please enter a valid payment reference ID");
-      return;
-    }
+    // Reset any previous error
+    setRefIdError("");
     
-    // Validate payment reference ID
+    // Validate payment reference ID format
     if (!validatePaymentRefId(paymentRefId)) {
-      toast.error("Invalid reference ID format. Please check and try again.");
       return;
     }
     
@@ -145,6 +155,7 @@ const OrderSuccess = () => {
       }
       
       if (existingOrder) {
+        setRefIdError("This payment reference has already been used for another order");
         toast.error("This payment reference has already been used for another order");
         setVerifyingPayment(false);
         return;
@@ -166,15 +177,26 @@ const OrderSuccess = () => {
         return;
       }
       
+      // Get order details for notification
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .select("total, delivery_address, phone")
+        .eq("id", orderId)
+        .single();
+        
+      if (orderError) {
+        console.error("Error fetching order details:", orderError);
+      }
+      
       // Send notification to owner about the payment
       const { error: notificationError } = await supabase.functions.invoke("send-owner-notification", {
         body: {
           orderId,
-          customerName: "Customer", // We don't have the name at this point
-          amount: 0, // We don't have the amount at this point
+          customerName: user?.email || "Customer",
+          amount: orderData?.total || 0,
           paymentRefId: paymentRefId.trim(),
-          customerPhone: "N/A", // We don't have the phone at this point
-          deliveryAddress: "N/A" // We don't have the address at this point
+          customerPhone: orderData?.phone || "N/A",
+          deliveryAddress: orderData?.delivery_address || "N/A"
         }
       });
       
@@ -310,13 +332,23 @@ const OrderSuccess = () => {
                 
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input 
-                      type="text" 
-                      value={paymentRefId}
-                      onChange={(e) => setPaymentRefId(e.target.value)}
-                      placeholder="UPI Transaction ID"
-                      className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
-                    />
+                    <div className="flex-grow relative">
+                      <input 
+                        type="text" 
+                        value={paymentRefId}
+                        onChange={(e) => {
+                          setPaymentRefId(e.target.value);
+                          if (refIdError) validatePaymentRefId(e.target.value);
+                        }}
+                        placeholder="UPI Transaction ID"
+                        className={`w-full border ${refIdError ? 'border-red-500' : 'border-gray-300'} rounded px-3 py-2 text-sm`}
+                      />
+                      {refIdError && (
+                        <div className="absolute right-2 top-2 text-red-500">
+                          <AlertTriangle className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
                     <Button 
                       onClick={handleVerifyPayment}
                       disabled={verifyingPayment || !paymentRefId.trim()}
@@ -325,6 +357,9 @@ const OrderSuccess = () => {
                       {verifyingPayment ? "Verifying..." : "Verify Payment"}
                     </Button>
                   </div>
+                  {refIdError && (
+                    <p className="text-xs text-red-500 mt-1">{refIdError}</p>
+                  )}
                   <p className="text-xs text-gray-500">
                     Enter the UPI reference ID you received after completing the payment.
                     This helps the restaurant owner verify your payment faster.
