@@ -1,4 +1,3 @@
-
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -122,10 +121,35 @@ const Checkout = () => {
       
       const paymentType = selectedQr === "owner" ? "myqr" : "upi";
       
-      // Save order with awaiting confirmation status
-      await saveOrderDetails(orderId, "awaiting_confirmation", paymentType);
+      if (!paymentConfirmationNumber) {
+        toast.error("Please enter the payment reference ID");
+        setIsProcessing(false);
+        return false;
+      }
       
-      toast.success("Order placed! Please wait for payment confirmation.");
+      // First, save the order with pending_owner_approval status
+      await saveOrderDetails(orderId, "pending_owner_approval", paymentType);
+      
+      // Now send notification to the owner via the edge function
+      const { data, error } = await supabase.functions.invoke("send-owner-notification", {
+        body: {
+          orderId,
+          customerName: address.fullName,
+          amount: total,
+          paymentRefId: paymentConfirmationNumber,
+          customerPhone: address.phone,
+          deliveryAddress: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`
+        }
+      });
+      
+      if (error) {
+        console.error("Owner notification error:", error);
+        toast.error("Failed to send notification to restaurant owner: " + (error.message || "Unknown error"));
+        setIsProcessing(false);
+        return false;
+      }
+      
+      toast.success("Order placed! Waiting for payment approval from the restaurant.");
       clearCart();
       navigate(`/order-success?orderId=${orderId}`);
       setIsProcessing(false);
@@ -147,15 +171,13 @@ const Checkout = () => {
         id: orderId,
         status: status,
         payment_method: payment_method,
+        payment_ref_id: paymentMethod === "qr" ? paymentConfirmationNumber : null,
         total: total,
         delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
         phone: address.phone,
         user_id: user?.id
       });
       
-      // Save order items and details if needed
-      // This would typically be done on the server side after payment confirmation
-      // But for COD, we can do it immediately
     } catch (err) {
       console.error("Error saving order details:", err);
     }
@@ -431,8 +453,8 @@ const Checkout = () => {
                     <div className="mt-4 text-sm text-fresh-orange">
                       <p className="font-medium">Important Note:</p>
                       <p className="text-xs text-gray-600 mt-1">
-                        After scanning and paying via QR code, your order will be in "Awaiting Confirmation" status 
-                        until the restaurant owner confirms receipt of the payment. This usually takes just a few minutes.
+                        After scanning and paying via QR code, you'll need to enter the UPI transaction reference ID.
+                        Your order will require approval from the restaurant owner before it's confirmed.
                       </p>
                     </div>
                   </div>
@@ -543,7 +565,7 @@ const Checkout = () => {
                   required
                 />
                 <p className="text-xs text-gray-500">
-                  This helps us verify your payment quickly
+                  This helps the restaurant owner verify your payment. You can find this in your UPI payment history.
                 </p>
               </div>
               

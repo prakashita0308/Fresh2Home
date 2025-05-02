@@ -3,3 +3,9 @@ project_id = "zpxwupykirsrazbrvdxr"
 
 [functions.create-phonpe-payment]
 verify_jwt = true
+
+[functions.send-owner-notification]
+verify_jwt = true
+
+[functions.approve-qr-payment]
+verify_jwt = false
