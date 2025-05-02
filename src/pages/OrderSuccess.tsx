@@ -32,7 +32,7 @@ const OrderSuccess = () => {
           // Check order status in DB
           const { data, error } = await supabase
             .from("orders")
-            .select("status, payment_method")
+            .select("status, payment_method, payment_ref_id")
             .eq("id", orderId)
             .single();
           
@@ -44,11 +44,13 @@ const OrderSuccess = () => {
           
           if (data) {
             // Type guard to ensure we don't access properties that might not exist
-            const orderData = data as { payment_method?: string, status?: string } | null;
+            const paymentMethod = data.payment_method || "Cash on Delivery";
+            const paymentStatus = data.status || "Pending";
+            const paymentRefId = data.payment_ref_id || "";
             
-            // Safely access the data properties
-            const paymentMethod = orderData?.payment_method || "Cash on Delivery";
-            const paymentStatus = orderData?.status || "Pending";
+            if (paymentRefId) {
+              setPaymentRefId(paymentRefId);
+            }
             
             setOrderDetails(prev => ({
               ...prev,
@@ -70,21 +72,42 @@ const OrderSuccess = () => {
     checkPaymentStatus();
   }, [orderId]);
 
+  const validatePaymentRefId = (refId: string) => {
+    // Basic validation: At least 6 alphanumeric characters, common patterns for UPI IDs
+    const refIdRegex = /^[A-Za-z0-9]{6,}$/;
+    return refIdRegex.test(refId.trim());
+  };
+
   const handleVerifyPayment = async () => {
     if (!paymentRefId.trim()) {
       toast.error("Please enter a valid payment reference ID");
       return;
     }
     
+    // Validate payment reference ID
+    if (!validatePaymentRefId(paymentRefId)) {
+      toast.error("Invalid reference ID format. Please check and try again.");
+      return;
+    }
+    
     setVerifyingPayment(true);
     
     try {
-      // Add a validation check to verify payment reference ID
-      // This is a simple validation - replace with actual verification logic
-      const isValidPayment = /^[A-Za-z0-9]{6,}$/.test(paymentRefId.trim());
+      // Check if the payment reference ID already exists in another completed order
+      const { data: existingOrder, error: checkError } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("payment_ref_id", paymentRefId.trim())
+        .eq("status", "completed")
+        .neq("id", orderId)
+        .maybeSingle();
+        
+      if (checkError) {
+        console.error("Error checking existing payment:", checkError);
+      }
       
-      if (!isValidPayment) {
-        toast.error("Invalid payment reference ID format");
+      if (existingOrder) {
+        toast.error("This payment reference has already been used for another order");
         setVerifyingPayment(false);
         return;
       }

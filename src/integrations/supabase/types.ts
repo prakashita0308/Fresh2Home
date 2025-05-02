@@ -95,6 +95,7 @@ export type Database = {
           created_at: string | null
           delivery_address: string
           id: string
+          payment_ref_id: string | null
           phone: string
           status: string
           total: number
@@ -105,6 +106,7 @@ export type Database = {
           created_at?: string | null
           delivery_address: string
           id?: string
+          payment_ref_id?: string | null
           phone: string
           status?: string
           total: number
@@ -115,6 +117,7 @@ export type Database = {
           created_at?: string | null
           delivery_address?: string
           id?: string
+          payment_ref_id?: string | null
           phone?: string
           status?: string
           total?: number
