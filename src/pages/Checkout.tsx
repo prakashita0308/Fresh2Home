@@ -1,3 +1,4 @@
+
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -114,6 +115,56 @@ const Checkout = () => {
       return false;
     }
   };
+
+  const handleStripePayment = async (orderId: string) => {
+    try {
+      setIsProcessing(true);
+      
+      if (!isBackendConnected) {
+        toast.error("Cannot process payment: Backend is not connected");
+        setIsProcessing(false);
+        return false;
+      }
+      
+      // Call the Supabase edge function to create a Stripe payment
+      const { data, error } = await supabase.functions.invoke("create-stripe-payment", {
+        body: {
+          amount: total,
+          redirectUrl: `${window.location.origin}/order-success?orderId=${orderId}`,
+          orderId,
+          customerName: address.fullName,
+          customerPhone: address.phone,
+          customerEmail: user?.email || ""
+        }
+      });
+      
+      if (error) {
+        console.error("Payment error:", error);
+        toast.error("Failed to initiate payment: " + (error.message || "Unknown error"));
+        setIsProcessing(false);
+        return false;
+      }
+      
+      if (data && data.success && data.url) {
+        // Save order details before redirecting
+        await saveOrderDetails(orderId, "initiated", "stripe");
+        
+        // Redirect the user to the Stripe checkout page
+        window.location.href = data.url;
+        return true;
+      } else {
+        console.error("Invalid payment response:", data);
+        toast.error("Payment gateway returned an invalid response");
+        setIsProcessing(false);
+        return false;
+      }
+    } catch (err) {
+      console.error("Payment processing error:", err);
+      toast.error("Error processing payment");
+      setIsProcessing(false);
+      return false;
+    }
+  };
   
   const handleQrPayment = async (orderId: string) => {
     try {
@@ -123,6 +174,14 @@ const Checkout = () => {
       
       if (!paymentConfirmationNumber) {
         toast.error("Please enter the payment reference ID");
+        setIsProcessing(false);
+        return false;
+      }
+      
+      // Validate UPI reference ID format
+      const upiRegex = /^[A-Za-z0-9]{6,}$/;
+      if (!upiRegex.test(paymentConfirmationNumber.trim())) {
+        toast.error("Invalid payment reference ID format. Please check and try again.");
         setIsProcessing(false);
         return false;
       }
@@ -214,6 +273,9 @@ const Checkout = () => {
     } else if (paymentMethod === "phonepe") {
       const success = await handlePhonePePayment(newOrderId);
       if (success) return; // User will be redirected to PhonePe
+    } else if (paymentMethod === "stripe") {
+      const success = await handleStripePayment(newOrderId);
+      if (success) return; // User will be redirected to Stripe
     }
     
     // Process order for COD payment
@@ -331,7 +393,7 @@ const Checkout = () => {
                   <h2 className="text-xl font-semibold">Payment Method</h2>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Cash on Delivery */}
                   <div 
                     className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -382,6 +444,29 @@ const Checkout = () => {
                       />
                     </div>
                     <p className="text-xs text-gray-500 mt-3 text-center">Secure online payment</p>
+                  </div>
+
+                  {/* Stripe (NEW) */}
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      paymentMethod === 'stripe' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setPaymentMethod('stripe')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                          paymentMethod === 'stripe' ? 'border-fresh-orange' : 'border-gray-300'
+                        }`}>
+                          {paymentMethod === 'stripe' && <div className="w-3 h-3 rounded-full bg-fresh-orange"></div>}
+                        </div>
+                        <span className="ml-2 font-medium">Card Payment</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center bg-gray-100 rounded-md py-3">
+                      <CreditCard className="h-6 w-6 text-gray-500" />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 text-center">Pay with credit/debit card</p>
                   </div>
 
                   {/* QR Code Payment */}
@@ -457,6 +542,27 @@ const Checkout = () => {
                         Your order will require approval from the restaurant owner before it's confirmed.
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {paymentMethod === 'stripe' && (
+                  <div className="mt-6 p-4 border rounded-lg border-gray-200 bg-gray-50">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <CreditCard className="h-4 w-4 text-fresh-orange" />
+                      <h3 className="text-sm font-medium">Secure Card Payment</h3>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-visa.svg" alt="Visa" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-mastercard.svg" alt="Mastercard" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-amex.svg" alt="American Express" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-rupay.svg" alt="Rupay" className="h-8" />
+                    </div>
+                    
+                    <p className="text-xs text-gray-600">
+                      Your card details will be securely processed by Stripe. 
+                      You'll be redirected to a secure payment page to complete your purchase.
+                    </p>
                   </div>
                 )}
               </div>

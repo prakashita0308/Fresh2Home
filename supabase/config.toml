@@ -9,3 +9,9 @@ verify_jwt = true
 
 [functions.approve-qr-payment]
 verify_jwt = false
+
+[functions.create-stripe-payment]
+verify_jwt = true
+
+[functions.verify-stripe-payment]
+verify_jwt = true
