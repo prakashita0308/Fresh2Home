@@ -85,7 +85,8 @@ const Checkout = () => {
           orderId,
           customerName: address.fullName,
           customerPhone: address.phone,
-          customerEmail: user?.email || ""
+          customerEmail: user?.email || "",
+          userId: user?.id || null
         }
       });
       
@@ -139,7 +140,8 @@ const Checkout = () => {
           orderId,
           customerName: address.fullName,
           customerPhone: address.phone,
-          customerEmail: user?.email || ""
+          customerEmail: user?.email || "",
+          userId: user?.id || null
         }
       });
       
@@ -152,10 +154,12 @@ const Checkout = () => {
       }
       
       if (data && data.success && data.url) {
-        // Save order details before redirecting
-        const saveResult = await saveOrderDetails(orderId, "initiated", "stripe");
-        if (!saveResult) {
-          console.warn("Could not save order details, but proceeding with payment");
+        // Save order details before redirecting - this might fail due to RLS but the edge function will handle it
+        try {
+          await saveOrderDetails(orderId, "initiated", "stripe");
+        } catch (saveErr) {
+          console.warn("Could not save order details locally, but proceeding with payment", saveErr);
+          // Continue with payment even if local order saving fails
         }
         
         // Redirect the user to the Stripe checkout page
@@ -213,6 +217,7 @@ const Checkout = () => {
           amount: total,
           paymentRefId: paymentConfirmationNumber,
           customerPhone: address.phone,
+          userId: user?.id || null,
           deliveryAddress: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`
         }
       });
@@ -243,8 +248,10 @@ const Checkout = () => {
     if (!isBackendConnected) return false;
     
     try {
+      console.log("Saving order with user ID:", user?.id);
+      
       // Create new order
-      const { error } = await supabase.from("orders").insert({
+      const { data, error } = await supabase.from("orders").insert({
         id: orderId,
         status: status,
         payment_method: payment_method,
@@ -252,8 +259,8 @@ const Checkout = () => {
         total: total,
         delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
         phone: address.phone,
-        user_id: user?.id
-      });
+        user_id: user?.id || null
+      }).select();
       
       if (error) {
         console.error("Error saving order details:", error);
@@ -261,6 +268,7 @@ const Checkout = () => {
         return false;
       }
       
+      console.log("Order saved successfully:", data);
       return true;
     } catch (err) {
       console.error("Error saving order details:", err);

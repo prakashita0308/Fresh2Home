@@ -58,6 +58,9 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    // Get user ID from metadata if available
+    const userId = session.metadata?.userId || null;
 
     // Create Supabase client using env variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -103,6 +106,7 @@ serve(async (req) => {
         .update({
           status: newStatus,
           payment_ref_id: sessionId,
+          user_id: userId,
           updated_at: new Date().toISOString()
         })
         .eq("id", orderId);

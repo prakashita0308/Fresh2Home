@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    const { amount, redirectUrl, orderId, customerName, customerPhone, customerEmail } = await req.json();
+    const { amount, redirectUrl, orderId, customerName, customerPhone, customerEmail, userId } = await req.json();
 
     if (!amount || !redirectUrl || !orderId) {
       return new Response(
@@ -64,6 +64,7 @@ serve(async (req) => {
         orderId: orderId,
         customerName: customerName || "",
         customerPhone: customerPhone || "",
+        userId: userId || "",
       },
     });
 
@@ -94,6 +95,7 @@ serve(async (req) => {
         .update({
           status: "initiated",
           payment_method: "stripe",
+          user_id: userId || null,
           updated_at: new Date().toISOString()
         })
         .eq("id", orderId);
