@@ -26,7 +26,16 @@ serve(async (req) => {
     }
 
     // Initialize Stripe with the secret key from environment variables
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeSecretKey) {
+      console.error("STRIPE_SECRET_KEY is not set in environment variables");
+      return new Response(
+        JSON.stringify({ error: "Payment gateway configuration error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2023-10-16",
     });
 
@@ -59,19 +68,40 @@ serve(async (req) => {
     });
 
     // Create Supabase client using env variables
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
-    // Update the order status to initiated
-    await supabase
-      .from("orders")
-      .update({
-        status: "initiated",
-        payment_method: "stripe",
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", orderId);
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error("Supabase configuration missing");
+      // Still return success with the Stripe session URL even if we can't update the order
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          url: session.url,
+          session_id: session.id
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      // Create Supabase client with service role key to bypass RLS
+      const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      
+      // Update the order status to initiated
+      await supabase
+        .from("orders")
+        .update({
+          status: "initiated",
+          payment_method: "stripe",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", orderId);
+    } catch (dbError) {
+      console.error("Database update error:", dbError);
+      // Continue even if the database update fails
+      // The payment can still be processed and verified later
+    }
 
     return new Response(
       JSON.stringify({ 

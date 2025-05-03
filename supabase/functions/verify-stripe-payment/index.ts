@@ -26,7 +26,16 @@ serve(async (req) => {
     }
 
     // Initialize Stripe with the secret key from environment variables
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeSecretKey) {
+      console.error("STRIPE_SECRET_KEY is not set in environment variables");
+      return new Response(
+        JSON.stringify({ error: "Payment gateway configuration error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2023-10-16",
     });
 
@@ -51,9 +60,22 @@ serve(async (req) => {
     }
 
     // Create Supabase client using env variables
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error("Supabase configuration missing");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Database configuration error"
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create Supabase client with service role key to bypass RLS
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     // Check the payment status
     let newStatus;
@@ -74,20 +96,28 @@ serve(async (req) => {
       newStatus = "failed";
     }
 
-    // Update the order status based on the payment status
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({
-        status: newStatus,
-        payment_ref_id: sessionId,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", orderId);
-    
-    if (updateError) {
-      console.error("Error updating order:", updateError);
+    try {
+      // Update the order status based on the payment status
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({
+          status: newStatus,
+          payment_ref_id: sessionId,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", orderId);
+      
+      if (updateError) {
+        console.error("Error updating order:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to update order status", details: updateError }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } catch (dbError) {
+      console.error("Database error:", dbError);
       return new Response(
-        JSON.stringify({ error: "Failed to update order status" }),
+        JSON.stringify({ error: "Database error", details: dbError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

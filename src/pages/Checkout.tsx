@@ -1,4 +1,3 @@
-
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -8,15 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Check, CreditCard, MapPin, Smartphone, QrCode } from "lucide-react";
+import { Check, CreditCard, MapPin, Smartphone, QrCode, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
@@ -49,6 +48,7 @@ const Checkout = () => {
   const [orderId, setOrderId] = useState("");
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [paymentConfirmationNumber, setPaymentConfirmationNumber] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
@@ -68,6 +68,7 @@ const Checkout = () => {
   const handlePhonePePayment = async (orderId: string) => {
     try {
       setIsProcessing(true);
+      setErrorMessage("");
       
       // Check backend connection
       if (!isBackendConnected) {
@@ -90,6 +91,7 @@ const Checkout = () => {
       
       if (error) {
         console.error("Payment error:", error);
+        setErrorMessage(`Failed to initiate payment: ${error.message || "Unknown error"}`);
         toast.error("Failed to initiate payment: " + (error.message || "Unknown error"));
         setIsProcessing(false);
         return false;
@@ -104,12 +106,14 @@ const Checkout = () => {
         return true;
       } else {
         console.error("Invalid payment response:", data);
+        setErrorMessage("Payment gateway returned an invalid response");
         toast.error("Payment gateway returned an invalid response");
         setIsProcessing(false);
         return false;
       }
     } catch (err) {
       console.error("Payment processing error:", err);
+      setErrorMessage(`Error processing payment: ${err instanceof Error ? err.message : String(err)}`);
       toast.error("Error processing payment");
       setIsProcessing(false);
       return false;
@@ -119,6 +123,7 @@ const Checkout = () => {
   const handleStripePayment = async (orderId: string) => {
     try {
       setIsProcessing(true);
+      setErrorMessage("");
       
       if (!isBackendConnected) {
         toast.error("Cannot process payment: Backend is not connected");
@@ -140,6 +145,7 @@ const Checkout = () => {
       
       if (error) {
         console.error("Payment error:", error);
+        setErrorMessage(`Failed to initiate payment: ${error.message || "Unknown error"}`);
         toast.error("Failed to initiate payment: " + (error.message || "Unknown error"));
         setIsProcessing(false);
         return false;
@@ -147,19 +153,24 @@ const Checkout = () => {
       
       if (data && data.success && data.url) {
         // Save order details before redirecting
-        await saveOrderDetails(orderId, "initiated", "stripe");
+        const saveResult = await saveOrderDetails(orderId, "initiated", "stripe");
+        if (!saveResult) {
+          console.warn("Could not save order details, but proceeding with payment");
+        }
         
         // Redirect the user to the Stripe checkout page
         window.location.href = data.url;
         return true;
       } else {
         console.error("Invalid payment response:", data);
+        setErrorMessage("Payment gateway returned an invalid response");
         toast.error("Payment gateway returned an invalid response");
         setIsProcessing(false);
         return false;
       }
     } catch (err) {
       console.error("Payment processing error:", err);
+      setErrorMessage(`Error processing payment: ${err instanceof Error ? err.message : String(err)}`);
       toast.error("Error processing payment");
       setIsProcessing(false);
       return false;
@@ -169,6 +180,7 @@ const Checkout = () => {
   const handleQrPayment = async (orderId: string) => {
     try {
       setIsProcessing(true);
+      setErrorMessage("");
       
       const paymentType = selectedQr === "owner" ? "myqr" : "upi";
       
@@ -186,8 +198,12 @@ const Checkout = () => {
         return false;
       }
       
-      // First, save the order with pending_owner_approval status
-      await saveOrderDetails(orderId, "pending_owner_approval", paymentType);
+      // First, try to save the order
+      const saveSuccess = await saveOrderDetails(orderId, "pending_owner_approval", paymentType);
+      
+      if (!saveSuccess) {
+        console.warn("Failed to save order details in database, but continuing with owner notification");
+      }
       
       // Now send notification to the owner via the edge function
       const { data, error } = await supabase.functions.invoke("send-owner-notification", {
@@ -203,6 +219,7 @@ const Checkout = () => {
       
       if (error) {
         console.error("Owner notification error:", error);
+        setErrorMessage(`Failed to send notification to restaurant owner: ${error.message || "Unknown error"}`);
         toast.error("Failed to send notification to restaurant owner: " + (error.message || "Unknown error"));
         setIsProcessing(false);
         return false;
@@ -215,18 +232,19 @@ const Checkout = () => {
       return true;
     } catch (err) {
       console.error("Payment processing error:", err);
+      setErrorMessage(`Error processing payment: ${err instanceof Error ? err.message : String(err)}`);
       toast.error("Error processing payment");
       setIsProcessing(false);
       return false;
     }
   };
   
-  const saveOrderDetails = async (orderId: string, status: string, payment_method: string) => {
-    if (!isBackendConnected) return;
+  const saveOrderDetails = async (orderId: string, status: string, payment_method: string): Promise<boolean> => {
+    if (!isBackendConnected) return false;
     
     try {
       // Create new order
-      await supabase.from("orders").insert({
+      const { error } = await supabase.from("orders").insert({
         id: orderId,
         status: status,
         payment_method: payment_method,
@@ -237,13 +255,22 @@ const Checkout = () => {
         user_id: user?.id
       });
       
+      if (error) {
+        console.error("Error saving order details:", error);
+        setErrorMessage(`Error saving order: ${error.message}`);
+        return false;
+      }
+      
+      return true;
     } catch (err) {
       console.error("Error saving order details:", err);
+      return false;
     }
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage("");
     
     // Validate form
     if (!address.fullName || !address.phone || !address.street || 
@@ -283,7 +310,13 @@ const Checkout = () => {
     
     try {
       // For COD, we confirm the order immediately
-      await saveOrderDetails(newOrderId, "pending", "cod");
+      const saveSuccess = await saveOrderDetails(newOrderId, "pending", "cod");
+      
+      if (!saveSuccess) {
+        toast.error("Failed to place order. Database error occurred.");
+        setIsProcessing(false);
+        return;
+      }
       
       // Simulate processing time
       setTimeout(() => {
@@ -294,6 +327,7 @@ const Checkout = () => {
       }, 1500);
     } catch (err) {
       console.error("Error processing order:", err);
+      setErrorMessage(`Failed to place order: ${err instanceof Error ? err.message : String(err)}`);
       toast.error("Failed to place order. Please try again.");
       setIsProcessing(false);
     }
@@ -304,6 +338,14 @@ const Checkout = () => {
       <Navbar />
       <main className="flex-grow container px-4 py-12">
         <h1 className="text-3xl font-bold mb-8">Checkout</h1>
+        
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
         
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -386,7 +428,7 @@ const Checkout = () => {
                 </div>
               </div>
               
-              {/* Payment Method Section - Completely Redesigned */}
+              {/* Payment Method Section */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-center mb-6">
                   <CreditCard className="h-5 w-5 mr-2 text-fresh-orange" />
@@ -681,9 +723,9 @@ const Checkout = () => {
                   e.preventDefault();
                   handleSubmit(e as any);
                 }}
-                disabled={!paymentConfirmationNumber}
+                disabled={!paymentConfirmationNumber || isProcessing}
               >
-                Confirm Payment & Place Order
+                {isProcessing ? "Processing..." : "Confirm Payment & Place Order"}
               </Button>
             </div>
           </div>
