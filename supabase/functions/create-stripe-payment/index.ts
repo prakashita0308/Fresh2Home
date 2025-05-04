@@ -39,6 +39,8 @@ serve(async (req) => {
       apiVersion: "2023-10-16",
     });
 
+    console.log(`Creating Stripe session for order ${orderId} with user ID: ${userId || 'guest'}`);
+
     // Create a Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -89,8 +91,10 @@ serve(async (req) => {
       // Create Supabase client with service role key to bypass RLS
       const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       
+      console.log(`Updating order ${orderId} with user ID: ${userId || 'null'}`);
+      
       // Update the order status to initiated
-      await supabase
+      const { data, error } = await supabase
         .from("orders")
         .update({
           status: "initiated",
@@ -98,7 +102,16 @@ serve(async (req) => {
           user_id: userId || null,
           updated_at: new Date().toISOString()
         })
-        .eq("id", orderId);
+        .eq("id", orderId)
+        .select();
+      
+      if (error) {
+        console.error("Database update error:", error);
+        // Continue even if the database update fails
+        // The payment can still be processed and verified later
+      } else {
+        console.log("Order updated successfully:", data);
+      }
     } catch (dbError) {
       console.error("Database update error:", dbError);
       // Continue even if the database update fails

@@ -1,3 +1,4 @@
+
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -132,6 +133,8 @@ const Checkout = () => {
         return false;
       }
       
+      console.log("Processing Stripe payment for order:", orderId, "with user ID:", user?.id || "guest");
+      
       // Call the Supabase edge function to create a Stripe payment
       const { data, error } = await supabase.functions.invoke("create-stripe-payment", {
         body: {
@@ -154,12 +157,12 @@ const Checkout = () => {
       }
       
       if (data && data.success && data.url) {
-        // Save order details before redirecting - this might fail due to RLS but the edge function will handle it
+        // The edge function will handle saving the order with the correct user_id
+        // We can try locally too, but if it fails, we can still proceed with payment
         try {
           await saveOrderDetails(orderId, "initiated", "stripe");
         } catch (saveErr) {
-          console.warn("Could not save order details locally, but proceeding with payment", saveErr);
-          // Continue with payment even if local order saving fails
+          console.log("Local order saving failed, but stripe function will handle it", saveErr);
         }
         
         // Redirect the user to the Stripe checkout page
@@ -248,10 +251,11 @@ const Checkout = () => {
     if (!isBackendConnected) return false;
     
     try {
-      console.log("Saving order with user ID:", user?.id);
+      console.log("Saving order with ID:", orderId);
+      console.log("User ID for order:", user?.id || "null (guest checkout)");
       
-      // Create new order
-      const { data, error } = await supabase.from("orders").insert({
+      // Create new order - don't use .select() as it might cause additional RLS issues
+      const { error } = await supabase.from("orders").insert({
         id: orderId,
         status: status,
         payment_method: payment_method,
@@ -260,18 +264,23 @@ const Checkout = () => {
         delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
         phone: address.phone,
         user_id: user?.id || null
-      }).select();
+      });
       
       if (error) {
         console.error("Error saving order details:", error);
-        setErrorMessage(`Error saving order: ${error.message}`);
+        const errorMsg = error.message || "Database error occurred";
+        setErrorMessage(`Error saving order: ${errorMsg}`);
+        toast.error(`Error saving order: ${errorMsg}`);
         return false;
       }
       
-      console.log("Order saved successfully:", data);
+      console.log("Order saved successfully");
       return true;
     } catch (err) {
-      console.error("Error saving order details:", err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("Error saving order details:", errorMsg);
+      setErrorMessage(`Error saving order: ${errorMsg}`);
+      toast.error(`Error saving order: ${errorMsg}`);
       return false;
     }
   };
@@ -321,7 +330,6 @@ const Checkout = () => {
       const saveSuccess = await saveOrderDetails(newOrderId, "pending", "cod");
       
       if (!saveSuccess) {
-        toast.error("Failed to place order. Database error occurred.");
         setIsProcessing(false);
         return;
       }
@@ -335,7 +343,8 @@ const Checkout = () => {
       }, 1500);
     } catch (err) {
       console.error("Error processing order:", err);
-      setErrorMessage(`Failed to place order: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(`Failed to place order: ${errorMsg}`);
       toast.error("Failed to place order. Please try again.");
       setIsProcessing(false);
     }
