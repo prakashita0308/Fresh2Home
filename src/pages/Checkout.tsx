@@ -10,13 +10,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Check, CreditCard, MapPin, Smartphone, QrCode, AlertCircle } from "lucide-react";
+import { Check, CreditCard, MapPin, Smartphone, QrCode, AlertCircle, Timer } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 declare global {
   interface Window {
@@ -56,6 +66,9 @@ const Checkout = () => {
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [paymentConfirmationNumber, setPaymentConfirmationNumber] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
+  const [countdown, setCountdown] = useState(15);
+  const [countdownActive, setCountdownActive] = useState(false);
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
@@ -78,6 +91,35 @@ const Checkout = () => {
       toast.error("Payment failed. Please try again.");
     }
   }, [paymentError]);
+  
+  // Countdown timer for QR payment confirmation
+  useEffect(() => {
+    let timer: number | undefined;
+    
+    if (showQrDialog && countdownActive && countdown > 0) {
+      timer = window.setTimeout(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
+    } else if (countdown === 0 && countdownActive) {
+      setShowPaymentConfirmation(true);
+      setCountdownActive(false);
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [countdown, showQrDialog, countdownActive]);
+  
+  // Start countdown when QR code dialog is shown
+  useEffect(() => {
+    if (showQrDialog) {
+      setCountdown(15);
+      setCountdownActive(true);
+    } else {
+      setCountdownActive(false);
+      setCountdown(15);
+    }
+  }, [showQrDialog]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -432,12 +474,13 @@ const Checkout = () => {
     // Handle different payment methods
     if (paymentMethod === "qr") {
       if (showQrDialog) {
-        if (!paymentConfirmationNumber) {
-          toast.error("Please enter the payment confirmation number");
+        if (paymentConfirmationNumber || showPaymentConfirmation) {
+          const success = await handleQrPayment(newOrderId);
+          if (success) return;
+        } else {
+          toast.error("Please enter the payment confirmation number or confirm your payment");
           return;
         }
-        const success = await handleQrPayment(newOrderId);
-        if (success) return;
       } else {
         // Show QR code dialog
         setShowQrDialog(true);
@@ -480,6 +523,32 @@ const Checkout = () => {
       toast.error("Failed to place order. Please try again.");
       setIsProcessing(false);
     }
+  };
+
+  const handleIHavePaid = () => {
+    setShowPaymentConfirmation(true);
+    setCountdownActive(false);
+  };
+  
+  const confirmPayment = () => {
+    // Auto-generate a reference ID if user hasn't provided one
+    if (!paymentConfirmationNumber) {
+      const autoRefId = `AUTO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+      setPaymentConfirmationNumber(autoRefId);
+    }
+    
+    // Close the payment confirmation dialog
+    setShowPaymentConfirmation(false);
+    
+    // Submit the form to complete payment
+    handleSubmit({
+      preventDefault: () => {}
+    } as React.FormEvent);
+  };
+  
+  const cancelPayment = () => {
+    setShowPaymentConfirmation(false);
+    setCountdownActive(false);
   };
   
   return (
@@ -911,6 +980,13 @@ const Checkout = () => {
                 </p>
               </div>
               
+              {countdownActive && (
+                <div className="flex items-center justify-center gap-2 text-amber-500">
+                  <Timer size={16} />
+                  <span>Auto-confirm in {countdown} seconds</span>
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="confirmationNumber">Enter UPI Reference Number</Label>
                 <Input 
@@ -918,27 +994,67 @@ const Checkout = () => {
                   value={paymentConfirmationNumber}
                   onChange={(e) => setPaymentConfirmationNumber(e.target.value)}
                   placeholder="e.g., UPI123456789"
-                  required
                 />
                 <p className="text-xs text-gray-500">
                   This helps the restaurant owner verify your payment. You can find this in your UPI payment history.
                 </p>
               </div>
               
-              <Button 
-                className="w-full bg-fresh-orange hover:bg-fresh-red"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleSubmit(e as any);
-                }}
-                disabled={!paymentConfirmationNumber || isProcessing}
-              >
-                {isProcessing ? "Processing..." : "Confirm Payment & Place Order"}
-              </Button>
+              <div className="grid grid-cols-2 gap-4">
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleIHavePaid}
+                  disabled={isProcessing}
+                >
+                  I've Paid
+                </Button>
+                
+                <Button 
+                  className="w-full bg-fresh-orange hover:bg-fresh-red"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (paymentConfirmationNumber) {
+                      handleSubmit(e as any);
+                    } else {
+                      toast.error("Please enter the payment confirmation number");
+                    }
+                  }}
+                  disabled={!paymentConfirmationNumber || isProcessing}
+                >
+                  {isProcessing ? "Processing..." : "Confirm Payment"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Payment Confirmation Dialog */}
+      <AlertDialog open={showPaymentConfirmation} onOpenChange={setShowPaymentConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Your Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Have you completed the payment of ₹{total.toFixed(2)} using the QR code?
+              {!paymentConfirmationNumber && (
+                <p className="mt-2 text-amber-500">
+                  Note: You haven't entered a UPI reference ID. We'll create an auto-generated ID for tracking.
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelPayment}>No, Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmPayment}
+              className="bg-fresh-orange hover:bg-fresh-red"
+            >
+              Yes, I've Paid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <Footer />
     </div>
