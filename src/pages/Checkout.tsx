@@ -1,3 +1,4 @@
+
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -16,6 +17,12 @@ import { v4 as uuidv4 } from "uuid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useContext(CartContext);
@@ -52,6 +59,18 @@ const Checkout = () => {
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
+
+  // Add script for Razorpay
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   // Check for payment errors
   useEffect(() => {
@@ -166,6 +185,114 @@ const Checkout = () => {
         
         // Redirect the user to the Stripe checkout page
         window.location.href = data.url;
+        return true;
+      } else {
+        console.error("Invalid payment response:", data);
+        setErrorMessage("Payment gateway returned an invalid response");
+        toast.error("Payment gateway returned an invalid response");
+        setIsProcessing(false);
+        return false;
+      }
+    } catch (err) {
+      console.error("Payment processing error:", err);
+      setErrorMessage(`Error processing payment: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error("Error processing payment");
+      setIsProcessing(false);
+      return false;
+    }
+  };
+  
+  const handleRazorpayPayment = async (orderId: string) => {
+    try {
+      setIsProcessing(true);
+      setErrorMessage("");
+      
+      if (!isBackendConnected) {
+        toast.error("Cannot process payment: Backend is not connected");
+        setIsProcessing(false);
+        return false;
+      }
+      
+      console.log("Processing Razorpay payment for order:", orderId);
+      
+      // Call the Supabase edge function to create a Razorpay order
+      const { data, error } = await supabase.functions.invoke("create-razorpay-payment", {
+        body: {
+          amount: total,
+          orderId,
+          customerName: address.fullName,
+          customerEmail: user?.email || "",
+          customerPhone: address.phone,
+          userId: user?.id || null
+        }
+      });
+      
+      if (error) {
+        console.error("Payment error:", error);
+        setErrorMessage(`Failed to initiate payment: ${error.message || "Unknown error"}`);
+        toast.error("Failed to initiate payment: " + (error.message || "Unknown error"));
+        setIsProcessing(false);
+        return false;
+      }
+      
+      if (data && data.success) {
+        // Open Razorpay checkout form
+        const options = {
+          key: data.key_id,
+          amount: data.amount,
+          currency: data.currency,
+          name: data.name,
+          description: data.description,
+          order_id: data.order_id,
+          prefill: {
+            name: data.prefill.name,
+            email: data.prefill.email,
+            contact: data.prefill.contact
+          },
+          handler: async function(response: any) {
+            try {
+              // Verify payment
+              const verifyResponse = await supabase.functions.invoke("verify-razorpay-payment", {
+                body: {
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
+                  phone: address.phone,
+                  order_id: orderId
+                }
+              });
+              
+              if (verifyResponse.error) {
+                toast.error("Payment verification failed: " + verifyResponse.error.message);
+                navigate(`/order-success?orderId=${orderId}&status=failed`);
+                return;
+              }
+              
+              if (verifyResponse.data.success) {
+                toast.success("Payment successful!");
+                clearCart();
+                navigate(`/order-success?orderId=${orderId}`);
+              } else {
+                toast.error("Payment verification failed");
+                navigate(`/order-success?orderId=${orderId}&status=failed`);
+              }
+            } catch (verifyError) {
+              console.error("Verification error:", verifyError);
+              toast.error("Error verifying payment");
+              navigate(`/order-success?orderId=${orderId}&status=unknown`);
+            }
+          },
+          modal: {
+            ondismiss: function() {
+              setIsProcessing(false);
+              toast.info("Payment cancelled");
+            }
+          }
+        };
+        
+        const razorpay = new window.Razorpay(options);
+        razorpay.open();
         return true;
       } else {
         console.error("Invalid payment response:", data);
@@ -322,6 +449,9 @@ const Checkout = () => {
     } else if (paymentMethod === "stripe") {
       const success = await handleStripePayment(newOrderId);
       if (success) return; // User will be redirected to Stripe
+    } else if (paymentMethod === "razorpay") {
+      const success = await handleRazorpayPayment(newOrderId);
+      if (success) return; // Razorpay modal will open
     }
     
     // Process order for COD payment
@@ -454,7 +584,7 @@ const Checkout = () => {
                   <h2 className="text-xl font-semibold">Payment Method</h2>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   {/* Cash on Delivery */}
                   <div 
                     className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -530,6 +660,37 @@ const Checkout = () => {
                     <p className="text-xs text-gray-500 mt-3 text-center">Pay with credit/debit card</p>
                   </div>
 
+                  {/* Razorpay (NEW) */}
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      paymentMethod === 'razorpay' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setPaymentMethod('razorpay')}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                          paymentMethod === 'razorpay' ? 'border-fresh-orange' : 'border-gray-300'
+                        }`}>
+                          {paymentMethod === 'razorpay' && <div className="w-3 h-3 rounded-full bg-fresh-orange"></div>}
+                        </div>
+                        <span className="ml-2 font-medium">Razorpay</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center bg-gray-100 rounded-md py-3">
+                      <img 
+                        src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/razorpay-logo.svg" 
+                        alt="Razorpay" 
+                        className="h-6" 
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "https://razorpay.com/assets/razorpay-glyph.svg";
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 text-center">UPI, Cards, NetBanking</p>
+                  </div>
+
                   {/* QR Code Payment */}
                   <div 
                     className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -553,6 +714,34 @@ const Checkout = () => {
                     <p className="text-xs text-gray-500 mt-3 text-center">Scan QR code to pay</p>
                   </div>
                 </div>
+
+                {paymentMethod === 'razorpay' && (
+                  <div className="mt-6 p-4 border rounded-lg border-gray-200 bg-gray-50">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <img 
+                        src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/razorpay-logo.svg" 
+                        alt="Razorpay" 
+                        className="h-5" 
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "https://razorpay.com/assets/razorpay-glyph.svg";
+                        }}
+                      />
+                      <h3 className="text-sm font-medium">Pay with Razorpay</h3>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-upi.svg" alt="UPI" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-visa.svg" alt="Visa" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-mastercard.svg" alt="Mastercard" className="h-8" />
+                      <img src="https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/payment-rupay.svg" alt="Rupay" className="h-8" />
+                    </div>
+                    
+                    <p className="text-xs text-gray-600">
+                      Pay securely with Razorpay. You can use UPI, credit/debit cards, net banking, and more payment methods.
+                    </p>
+                  </div>
+                )}
 
                 {paymentMethod === 'qr' && (
                   <div className="mt-6 p-4 border rounded-lg border-gray-200 bg-gray-50">

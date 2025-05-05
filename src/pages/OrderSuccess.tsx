@@ -18,6 +18,7 @@ interface OrderDetails {
   created_at: string;
   payment_method: string;
   payment_ref_id: string | null;
+  customer_name?: string;
 }
 
 const OrderSuccess = () => {
@@ -32,6 +33,16 @@ const OrderSuccess = () => {
   const orderId = searchParams.get('orderId');
   const paymentStatus = searchParams.get('payment_status');
   const sessionId = searchParams.get('session_id');
+  const status = searchParams.get('status');
+  
+  // Check for payment status from URL parameters
+  useEffect(() => {
+    if (status === 'failed') {
+      toast.error("Payment failed or was cancelled. Please try again.");
+    } else if (status === 'unknown') {
+      toast.warning("Payment status unknown. We'll update you once confirmed.");
+    }
+  }, [status]);
   
   // Determine if we need to verify Stripe payment
   useEffect(() => {
@@ -188,6 +199,8 @@ const OrderSuccess = () => {
         return "PhonePe";
       case "stripe":
         return "Card Payment (Stripe)";
+      case "razorpay":
+        return "Razorpay";
       case "myqr":
         return "UPI QR Code (Owner)";
       case "upi":
@@ -332,6 +345,13 @@ const OrderSuccess = () => {
                     <p className="font-medium">{order.delivery_address}</p>
                   </div>
                 </div>
+
+                {order.customer_name && (
+                  <div>
+                    <h3 className="text-sm text-gray-500 mb-1">Customer</h3>
+                    <p className="font-medium">{order.customer_name}</p>
+                  </div>
+                )}
               </div>
               
               <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center sm:justify-end">

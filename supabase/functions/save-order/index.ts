@@ -64,7 +64,8 @@ serve(async (req) => {
         total: total,
         delivery_address: delivery_address,
         phone: phone,
-        user_id: user_id
+        user_id: user_id,
+        customer_name: customer_name
       })
       .select();
     

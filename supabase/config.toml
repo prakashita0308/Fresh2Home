@@ -42,3 +42,7 @@ port = 54328
 [functions]
 [functions.save-order]
 verify_jwt = false
+[functions.create-razorpay-payment]
+verify_jwt = false
+[functions.verify-razorpay-payment]
+verify_jwt = false
