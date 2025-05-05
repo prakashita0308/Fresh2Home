@@ -1,4 +1,3 @@
-
 import { useContext, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -254,16 +253,19 @@ const Checkout = () => {
       console.log("Saving order with ID:", orderId);
       console.log("User ID for order:", user?.id || "null (guest checkout)");
       
-      // Create new order - don't use .select() as it might cause additional RLS issues
-      const { error } = await supabase.from("orders").insert({
-        id: orderId,
-        status: status,
-        payment_method: payment_method,
-        payment_ref_id: paymentMethod === "qr" ? paymentConfirmationNumber : null,
-        total: total,
-        delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
-        phone: address.phone,
-        user_id: user?.id || null
+      // Create new order directly using edge function to bypass RLS issues
+      const { data, error } = await supabase.functions.invoke("save-order", {
+        body: {
+          orderId,
+          status,
+          payment_method,
+          payment_ref_id: paymentMethod === "qr" ? paymentConfirmationNumber : null,
+          total,
+          delivery_address: `${address.street}, ${address.city}, ${address.state}, ${address.pincode}`,
+          phone: address.phone,
+          user_id: user?.id || null,
+          customer_name: address.fullName
+        }
       });
       
       if (error) {
@@ -274,7 +276,7 @@ const Checkout = () => {
         return false;
       }
       
-      console.log("Order saved successfully");
+      console.log("Order saved successfully:", data);
       return true;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
