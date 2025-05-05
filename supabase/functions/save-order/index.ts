@@ -53,40 +53,47 @@ serve(async (req) => {
     // Create Supabase client with service role key to bypass RLS
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     
-    // Insert order into the database
-    const { data, error } = await supabase
-      .from("orders")
-      .insert({
-        id: orderId,
-        status: status,
-        payment_method: payment_method,
-        payment_ref_id: payment_ref_id,
-        total: total,
-        delivery_address: delivery_address,
-        phone: phone,
-        user_id: user_id,
-        customer_name: customer_name
-      })
-      .select();
-    
-    if (error) {
-      console.error("Database error:", error);
+    // Check if customer_name column exists, otherwise we'll need a different approach
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .insert({
+          id: orderId,
+          status: status,
+          payment_method: payment_method,
+          payment_ref_id: payment_ref_id,
+          total: total,
+          delivery_address: delivery_address,
+          phone: phone,
+          user_id: user_id
+        })
+        .select();
+      
+      if (error) {
+        console.error("Database error:", error);
+        return new Response(
+          JSON.stringify({ error: error.message || "Failed to save order" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log("Order saved successfully:", orderId);
+      
       return new Response(
-        JSON.stringify({ error: error.message || "Failed to save order" }),
+        JSON.stringify({ 
+          success: true, 
+          message: "Order saved successfully",
+          order: data
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (dbError) {
+      console.error("Error during database operation:", dbError);
+      return new Response(
+        JSON.stringify({ error: dbError.message || "Database operation failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
-    console.log("Order saved successfully:", orderId);
-    
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: "Order saved successfully",
-        order: data
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
     
   } catch (error) {
     console.error("Error saving order:", error);

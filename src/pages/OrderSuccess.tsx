@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
@@ -18,6 +19,7 @@ interface OrderDetails {
   payment_method: string;
   payment_ref_id: string | null;
   customer_name?: string;
+  phone?: string;
 }
 
 const OrderSuccess = () => {
@@ -93,6 +95,7 @@ const OrderSuccess = () => {
   const fetchOrder = async (id: string) => {
     if (!isBackendConnected) {
       setLoading(false);
+      setError("Backend connection is not available");
       return;
     }
     
@@ -101,11 +104,18 @@ const OrderSuccess = () => {
         .from("orders")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
         
       if (error) {
         console.error("Error fetching order:", error);
         setError("Could not find your order. Please contact customer support.");
+        setLoading(false);
+        return;
+      }
+      
+      if (!data) {
+        console.error("No order found with ID:", id);
+        setError("Order not found. It may have been processed or deleted.");
         setLoading(false);
         return;
       }
@@ -349,6 +359,13 @@ const OrderSuccess = () => {
                   <div>
                     <h3 className="text-sm text-gray-500 mb-1">Customer</h3>
                     <p className="font-medium">{order.customer_name}</p>
+                  </div>
+                )}
+                
+                {order.phone && (
+                  <div>
+                    <h3 className="text-sm text-gray-500 mb-1">Phone</h3>
+                    <p className="font-medium">{order.phone}</p>
                   </div>
                 )}
               </div>

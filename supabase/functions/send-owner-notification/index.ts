@@ -39,8 +39,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Get owner email from environment variable
-    const ownerEmail = Deno.env.get("OWNER_EMAIL");
+    // Get owner email from environment variable or use the provided one
+    const ownerEmail = Deno.env.get("OWNER_EMAIL") || "chaksnavy522@gmail.com";
     
     if (!ownerEmail) {
       console.error("Owner email is not configured");

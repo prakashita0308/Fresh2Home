@@ -59,7 +59,7 @@ serve(async (req) => {
     // Check if the order exists and is in the pending_owner_approval state
     const { data: orderData, error: fetchError } = await supabase
       .from("orders")
-      .select("*, profiles(first_name, last_name, email)")
+      .select("*")
       .eq("id", orderId)
       .eq("status", "pending_owner_approval")
       .maybeSingle();
@@ -129,7 +129,7 @@ serve(async (req) => {
     
     // Send confirmation email to the owner if the payment was approved
     if (action === "approve") {
-      const ownerEmail = Deno.env.get("OWNER_EMAIL") || "";
+      const ownerEmail = Deno.env.get("OWNER_EMAIL") || "chaksnavy522@gmail.com";
       
       if (ownerEmail) {
         const subject = `Payment Approved for Order #${orderId.substring(0, 8)}`;
