@@ -75,7 +75,7 @@ serve(async (req) => {
       );
     }
 
-    // Create UPI payment URL
+    // Create UPI payment URL with amount-specific parameters
     const upiId = "7680087955@ybl"; // Your PhonePe UPI ID
     const upiParams = new URLSearchParams({
       pa: upiId, // payee address (UPI ID)
@@ -88,7 +88,8 @@ serve(async (req) => {
     const upiUrl = `upi://pay?${upiParams.toString()}`;
     
     // Generate QR code URL using a free QR code generation API
-    const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200`;
+    // Add amount to prevent caching of old QR codes
+    const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&amount=${amount}`;
     
     // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
