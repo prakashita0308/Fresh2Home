@@ -75,91 +75,46 @@ serve(async (req) => {
       );
     }
 
-    // PhonePe integration parameters
-    const PHONPE_MERCHANT_ID = Deno.env.get("PHONPE_MERCHANT_ID") || "";
-    const PHONPE_SALT_KEY = Deno.env.get("PHONPE_SALT_KEY") || "";
-    const PHONPE_SALT_INDEX = Deno.env.get("PHONPE_SALT_INDEX") || "1";
-    
-    if (!PHONPE_MERCHANT_ID || !PHONPE_SALT_KEY) {
-      return new Response(
-        JSON.stringify({ error: "PhonePe configuration is missing" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Create verify URL for callback
-    const verifyCallbackUrl = `${new URL(req.url).origin}/verify?orderId=${orderId}`;
-    
-    // Create the PhonePe payload
-    const payload = {
-      merchantId: PHONPE_MERCHANT_ID,
-      merchantTransactionId: orderId,
-      amount: amount * 100, // Convert to paise (PhonePe expects amount in paise)
-      merchantUserId: "MERCHANT_USER_ID", // You can replace this with an actual user ID if available
-      redirectUrl: redirectUrl,
-      redirectMode: "REDIRECT",
-      callbackUrl: verifyCallbackUrl, // Using the verification callback
-      paymentInstrument: {
-        type: "PAY_PAGE"
-      },
-      customerMobileNumber: customerPhone || "",
-      customerEmail: customerEmail || "",
-      customerName: customerName || "",
-    };
-
-    // Convert payload to base64
-    const payloadBase64 = btoa(JSON.stringify(payload));
-    
-    // Create the checksum (payload base64 + "/pg/v1/pay" + salt key)
-    const string = payloadBase64 + "/pg/v1/pay" + PHONPE_SALT_KEY;
-    
-    // Generate SHA-256 hash
-    const encoder = new TextEncoder();
-    const data = encoder.encode(string);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    
-    // Convert hash to hex string
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const checksum = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    // Create the X-VERIFY header
-    const xVerify = `${checksum}###${PHONPE_SALT_INDEX}`;
-    
-    // Make the request to PhonePe
-    const response = await fetch("https://api.phonepe.com/apis/hermes/pg/v1/pay", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-VERIFY": xVerify,
-      },
-      body: JSON.stringify({
-        request: payloadBase64
-      }),
+    // Create UPI payment URL
+    const upiId = "7680087955@ybl"; // Your PhonePe UPI ID
+    const upiParams = new URLSearchParams({
+      pa: upiId, // payee address (UPI ID)
+      pn: "Restaurant", // payee name
+      am: amount.toString(), // amount
+      tn: `Order #${orderId.substring(0, 8)}`, // transaction note
+      cu: "INR", // currency
     });
     
-    const responseData = await response.json();
+    const upiUrl = `upi://pay?${upiParams.toString()}`;
     
-    // Create Supabase client using the service role key
+    // Generate QR code URL using a free QR code generation API
+    const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200`;
+    
+    // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Update the order status with payment details
-    if (responseData.success) {
-      await supabase.from("orders").update({
-        payment_method: "phonepe",
-        status: "initiated",
-        updated_at: new Date().toISOString()
-      }).eq("id", orderId);
-    }
+    // Update the order status
+    await supabase.from("orders").update({
+      payment_method: "phonepe",
+      status: "initiated",
+      updated_at: new Date().toISOString()
+    }).eq("id", orderId);
     
-    // Return the PhonePe response
+    // Return the PhonePe payment data
     return new Response(
-      JSON.stringify(responseData),
-      { 
-        status: response.status, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      }
+      JSON.stringify({
+        success: true,
+        data: {
+          orderId: orderId,
+          upiUrl: upiUrl,
+          qrCodeUrl: qrCodeApiUrl,
+          amount: amount,
+          recipientUpiId: upiId
+        }
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
     
   } catch (error) {

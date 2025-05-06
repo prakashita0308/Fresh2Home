@@ -68,6 +68,10 @@ const Checkout = () => {
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [countdown, setCountdown] = useState(15);
   const [countdownActive, setCountdownActive] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [upiPaymentUrl, setUpiPaymentUrl] = useState("");
+  const [phonePeUpiId, setPhonePeUpiId] = useState("");
+  const [showPhonePeDialog, setShowPhonePeDialog] = useState(false);
   
   const deliveryFee = 40;
   const total = subtotal + deliveryFee;
@@ -158,12 +162,16 @@ const Checkout = () => {
         return false;
       }
       
-      if (data && data.success && data.data && data.data.instrumentResponse && data.data.instrumentResponse.redirectInfo) {
-        // Save order details before redirecting
-        await saveOrderDetails(orderId, "initiated", "phonepe");
+      if (data && data.success && data.data) {
+        // Show QR code dialog
+        setQrCodeUrl(data.data.qrCodeUrl);
+        setUpiPaymentUrl(data.data.upiUrl);
+        setPhonePeUpiId(data.data.recipientUpiId);
+        setShowPhonePeDialog(true);
         
-        // Redirect the user to the PhonePe payment page
-        window.location.href = data.data.instrumentResponse.redirectInfo.url;
+        // Save order details
+        await saveOrderDetails(orderId, "initiated", "phonepe");
+        setIsProcessing(false);
         return true;
       } else {
         console.error("Invalid payment response:", data);
@@ -487,7 +495,7 @@ const Checkout = () => {
       }
     } else if (paymentMethod === "phonepe") {
       const success = await handlePhonePePayment(newOrderId);
-      if (success) return; // User will be redirected to PhonePe
+      if (success) return; // PhonePe QR code dialog will be shown
     } else if (paymentMethod === "stripe") {
       const success = await handleStripePayment(newOrderId);
       if (success) return; // User will be redirected to Stripe
@@ -678,7 +686,7 @@ const Checkout = () => {
                     <p className="text-xs text-gray-500 mt-3 text-center">Pay with cash upon delivery</p>
                   </div>
 
-                  {/* PhonePe */}
+                  {/* PhonePe Payment Method */}
                   <div 
                     className={`border rounded-lg p-4 cursor-pointer transition-all ${
                       paymentMethod === 'phonepe' ? 'border-fresh-orange bg-fresh-orange/5' : 'border-gray-200 hover:border-gray-300'
@@ -700,9 +708,13 @@ const Checkout = () => {
                         src="/images/phonepe-logo.png" 
                         alt="PhonePe" 
                         className="h-6" 
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "https://cdn.jsdelivr.net/gh/AzadatRahimov/master@main/src/img/phonepe-logo.svg";
+                        }}
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-3 text-center">Secure online payment</p>
+                    <p className="text-xs text-gray-500 mt-3 text-center">Pay with your PhonePe</p>
                   </div>
 
                   {/* Stripe (NEW) */}
@@ -1023,6 +1035,86 @@ const Checkout = () => {
                 >
                   {isProcessing ? "Processing..." : "Confirm Payment"}
                 </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* PhonePe QR Code Dialog */}
+      <Dialog open={showPhonePeDialog} onOpenChange={setShowPhonePeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Scan & Pay with PhonePe</DialogTitle>
+            <DialogDescription>
+              Scan the QR code below to pay ₹{total.toFixed(2)} via PhonePe
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col items-center justify-center p-4">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+              {qrCodeUrl && (
+                <img 
+                  src={qrCodeUrl} 
+                  alt="PhonePe QR Code" 
+                  className="h-64 w-auto"
+                />
+              )}
+            </div>
+            
+            <div className="w-full space-y-4">
+              <div className="text-center">
+                <p className="font-medium text-lg">Total: ₹{total.toFixed(2)}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pay to: {phonePeUpiId}
+                </p>
+              </div>
+              
+              <div className="flex flex-col space-y-4">
+                <Button 
+                  className="w-full bg-[#5f259f] hover:bg-[#4a1d79]"
+                  onClick={() => {
+                    // Open PhonePe app with the UPI URL if on mobile
+                    if (upiPaymentUrl && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                      window.location.href = upiPaymentUrl;
+                    } else {
+                      // Copy UPI ID to clipboard for desktop users
+                      navigator.clipboard.writeText(phonePeUpiId);
+                      toast.success("UPI ID copied to clipboard!");
+                    }
+                  }}
+                >
+                  {/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) 
+                    ? "Open PhonePe App" 
+                    : "Copy UPI ID"}
+                </Button>
+
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setShowPhonePeDialog(false);
+                      
+                      // Ask for payment confirmation reference
+                      setShowQrDialog(true);
+                      setCountdownActive(true);
+                      setCountdown(15);
+                    }}
+                  >
+                    I've Paid
+                  </Button>
+                  
+                  <Button 
+                    variant="outline"
+                    className="w-full border-red-300 text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      setShowPhonePeDialog(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
