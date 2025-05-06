@@ -77,19 +77,22 @@ serve(async (req) => {
 
     // Create UPI payment URL with amount-specific parameters
     const upiId = "7680087955@ybl"; // Your PhonePe UPI ID
+    const timestamp = new Date().getTime(); // Add timestamp for uniqueness
+    
     const upiParams = new URLSearchParams({
       pa: upiId, // payee address (UPI ID)
       pn: "Restaurant", // payee name
       am: amount.toString(), // amount
       tn: `Order #${orderId.substring(0, 8)}`, // transaction note
       cu: "INR", // currency
+      tr: `TR${orderId.substring(0, 6)}${timestamp.toString().substring(-6)}`, // Add unique transaction reference
     });
     
     const upiUrl = `upi://pay?${upiParams.toString()}`;
     
     // Generate QR code URL using a free QR code generation API
-    // Add amount to prevent caching of old QR codes
-    const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&amount=${amount}`;
+    // Add amount, orderId and timestamp to prevent caching and ensure uniqueness
+    const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&amount=${amount}&orderId=${orderId}&ts=${timestamp}`;
     
     // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -103,6 +106,8 @@ serve(async (req) => {
       updated_at: new Date().toISOString()
     }).eq("id", orderId);
     
+    console.log(`Generated unique QR for order ${orderId} with amount ₹${amount} at timestamp ${timestamp}`);
+    
     // Return the PhonePe payment data
     return new Response(
       JSON.stringify({
@@ -112,7 +117,8 @@ serve(async (req) => {
           upiUrl: upiUrl,
           qrCodeUrl: qrCodeApiUrl,
           amount: amount,
-          recipientUpiId: upiId
+          recipientUpiId: upiId,
+          timestamp: timestamp // Return timestamp for reference
         }
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
